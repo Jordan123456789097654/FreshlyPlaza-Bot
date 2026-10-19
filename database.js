@@ -23,7 +23,8 @@ let dbData = {
     shift_evaluations: [],
     customer_feedback: [],
     gtn_games: [],
-    gtn_stats: {}
+    gtn_stats: {},
+    ia_recordings: []
 };
 
 function saveDb() {
@@ -1011,6 +1012,52 @@ const db = {
             best_guesses: null,
             last_win: null
         };
+    },
+
+    // Internal Affairs (IA) Audio Recordings
+    async addIaRecording(data) {
+        loadDb();
+        if (!dbData.ia_recordings) dbData.ia_recordings = [];
+        dbData.ia_recordings.push(data);
+        saveDb();
+        return data;
+    },
+
+    async getIaRecording(id) {
+        loadDb();
+        if (!dbData.ia_recordings) dbData.ia_recordings = [];
+        return dbData.ia_recordings.find(r => r.id === id);
+    },
+
+    async listIaRecordings(limit = 25) {
+        loadDb();
+        if (!dbData.ia_recordings) dbData.ia_recordings = [];
+        return [...dbData.ia_recordings]
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            .slice(0, limit);
+    },
+
+    async deleteIaRecording(id) {
+        loadDb();
+        if (!dbData.ia_recordings) dbData.ia_recordings = [];
+        const initial = dbData.ia_recordings.length;
+        dbData.ia_recordings = dbData.ia_recordings.filter(r => r.id !== id);
+        saveDb();
+        return dbData.ia_recordings.length < initial;
+    },
+
+    async cleanupExpiredIaRecordings() {
+        loadDb();
+        if (!dbData.ia_recordings) return 0;
+        const now = Date.now();
+        const initial = dbData.ia_recordings.length;
+        dbData.ia_recordings = dbData.ia_recordings.filter(r => {
+            const exp = new Date(r.expires_at).getTime();
+            return isNaN(exp) || exp > now;
+        });
+        const removed = initial - dbData.ia_recordings.length;
+        if (removed > 0) saveDb();
+        return removed;
     }
 };
 

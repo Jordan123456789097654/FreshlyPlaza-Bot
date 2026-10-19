@@ -54,6 +54,39 @@ async function handleInteraction(interaction) {
             return interaction.reply({ content: '✅ **Activity Confirmed!** Thank you for your continued dedication to the FreshlyPlaza staff team.', ephemeral: true });
         }
 
+        // Internal Affairs Voice Recording Stop Button
+        if (customId === 'btn_ia_stop_recording') {
+            const member = interaction.member;
+            const isAuthorized = member.permissions.has(PermissionFlagsBits.Administrator) ||
+                member.roles.cache.some(r => {
+                    const n = r.name.toLowerCase();
+                    return n.includes('internal affairs') || n.includes('director') || n.includes('head of moderation') || n.includes('trust & safety lead');
+                });
+
+            if (!isAuthorized) {
+                return interaction.reply({ content: '❌ You are not authorized to conclude this Internal Affairs recording.', ephemeral: true });
+            }
+
+            await interaction.deferReply();
+            try {
+                const { stopIaRecording } = require('../utils/iaRecorder');
+                const { AttachmentBuilder } = require('discord.js');
+                const { record, filePath, fileName } = await stopIaRecording(interaction.guild.id);
+                const att = new AttachmentBuilder(filePath, { name: fileName });
+
+                const doneEmbed = new EmbedBuilder()
+                    .setTitle('⏹️ [INTERNAL AFFAIRS] RECORDING CONCLUDED')
+                    .setDescription(`Audio wiretap **${record.id}** stopped and exported.\nDownload the interactive player attachment below.`)
+                    .setColor(0x2ECC71)
+                    .setFooter({ text: 'FreshlyPlaza Internal Affairs Vault' })
+                    .setTimestamp();
+
+                return interaction.followUp({ embeds: [doneEmbed], files: [att] });
+            } catch (err) {
+                return interaction.followUp({ content: `❌ Error stopping recording: ${err.message}`, ephemeral: true });
+            }
+        }
+
         // Final Warning Individual Activity Check Confirmation Button
         if (customId === 'btn_confirm_warning_check') {
             const data = db.getData();

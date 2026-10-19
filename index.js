@@ -507,6 +507,22 @@ client.once('clientReady', async () => {
     // 📋 Workforce Management: Overdue Staff Data Entry Auto-Termination Check
     setTimeout(() => checkOverdueStaffDataNotices(client), 45000);
     setInterval(() => checkOverdueStaffDataNotices(client), 15 * 60 * 1000); // Check every 15 minutes
+
+    // 🕵️ Internal Affairs (IA): 30-Day Auto-Cleanup of Expired Wiretap Audio & Records
+    const cleanupExpiredRecordings = async () => {
+        try {
+            const { getDb } = require('./database');
+            const db = getDb();
+            if (db && db.cleanupExpiredIaRecordings) {
+                const count = await db.cleanupExpiredIaRecordings();
+                if (count > 0) console.log(`[IA PURGE] Automatically purged ${count} expired wiretap recordings (30-day policy).`);
+            }
+        } catch (e) {
+            console.error('[IA CLEANUP ERROR]', e);
+        }
+    };
+    setTimeout(cleanupExpiredRecordings, 60000);
+    setInterval(cleanupExpiredRecordings, 12 * 60 * 60 * 1000); // Purge check every 12 hours
 });
 
 // 🎫 Automatic Ticket Roles Auto-Assignment for HR+ & Staff
