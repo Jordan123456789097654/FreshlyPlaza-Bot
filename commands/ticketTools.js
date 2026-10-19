@@ -4,62 +4,6 @@ const { hasTicketOverride } = require('../utils/ticketAccess');
 const { getDb } = require('../database');
 
 module.exports = [
-    // 1. /csat-metrics - Support Satisfaction & CSAT Performance Analytics
-    {
-        data: new SlashCommandBuilder()
-            .setName('csat-metrics')
-            .setDescription('View live customer support satisfaction ratings, CSAT breakdown, and ticket resolution statistics'),
-        async execute(interaction) {
-            await interaction.deferReply();
-            const db = getDb();
-            const data = db.getData();
-            const tickets = data.tickets || [];
-
-            // Calculate Ratings
-            const ratedTickets = tickets.filter(t => t.feedback_rating && t.feedback_rating > 0);
-            const totalRatings = ratedTickets.length;
-            const avgRating = totalRatings > 0 
-                ? (ratedTickets.reduce((acc, t) => acc + t.feedback_rating, 0) / totalRatings).toFixed(1) 
-                : '5.0';
-
-            const star5 = ratedTickets.filter(t => t.feedback_rating === 5).length;
-            const star4 = ratedTickets.filter(t => t.feedback_rating === 4).length;
-            const star3 = ratedTickets.filter(t => t.feedback_rating === 3).length;
-            const starLow = ratedTickets.filter(t => t.feedback_rating <= 2).length;
-
-            const positiveCount = star5 + star4;
-            const csatPercentage = totalRatings > 0 ? Math.round((positiveCount / totalRatings) * 100) : 100;
-
-            const closedTickets = tickets.filter(t => t.status === 'CLOSED' || t.status === 'RESOLVED_BY_AI');
-            const aiHandled = closedTickets.filter(t => t.ai_handled).length;
-            const humanHandled = closedTickets.length - aiHandled;
-
-            const embed = new EmbedBuilder()
-                .setTitle('📊 FreshlyPlaza Customer Support & CSAT Intelligence')
-                .setDescription('Real-time quality metrics and customer satisfaction ratings from ticket feedback surveys.')
-                .addFields(
-                    { name: '⭐ Overall CSAT Score', value: `\`${csatPercentage}%\` Positive Satisfaction`, inline: true },
-                    { name: '🌟 Average Star Rating', value: `\`${avgRating} / 5.0 ⭐\` (${totalRatings} reviews)`, inline: true },
-                    { name: '📂 Total Tickets Managed', value: `**${tickets.length}** tickets`, inline: true },
-                    { 
-                        name: '📈 Rating Distribution', 
-                        value: `⭐⭐⭐⭐⭐ 5 Stars: **${star5}**\n⭐⭐⭐⭐ 4 Stars: **${star4}**\n⭐⭐⭐ 3 Stars: **${star3}**\n⭐/⭐⭐ 1-2 Stars: **${starLow}**`, 
-                        inline: false 
-                    },
-                    { 
-                        name: '🤖 AI vs Human Workload', 
-                        value: `• **Human Staff Resolutions:** ${humanHandled}\n• **AI Assistant Automated Resolutions:** ${aiHandled}`, 
-                        inline: false 
-                    }
-                )
-                .setColor(csatPercentage >= 85 ? config.colors.primary : config.colors.warning)
-                .setFooter({ text: 'FreshlyPlaza Customer Success & SLA Telemetry' })
-                .setTimestamp();
-
-            return interaction.editReply({ embeds: [embed] });
-        }
-    },
-
     // 2. /ticket-alarm - Emergency Leadership Alarm
     {
         data: new SlashCommandBuilder()

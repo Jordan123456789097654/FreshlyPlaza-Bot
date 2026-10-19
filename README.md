@@ -37,7 +37,7 @@ An all-in-one Discord bot built for **FreshlyPlaza** Roblox grocery store commun
   3. Detailed alert logged to `#modlogs` (`1524174852980736150`) and `#punishment-logs` (`1511043475150209276`)
 
 ### 7. 🎫 Support Ticket System
-- **Commands**: `/ticket panel`, `/ticket close`, `/ticket add`
+- **Commands**: `/ticket-panel`, `/ticket-create`, `/ticket-add`, `/ticket-remove`, `/ticket-close` (with optional resolution summary), `/ticket-stats` (includes CSAT)
 - **Categories**: Customer Support, Player/Staff Report, HR & Management Inquiry.
 - **Category**: Opens private channels under `Tickets` (`1525187246016434267`).
 
@@ -59,6 +59,9 @@ Run the master deployment command in Discord:
 /setup-freshlyplaza
 ```
 This automatically deploys all interactive panels into their respective channels in FreshlyPlaza server!
+
+### Environment
+- `HEALTH_API_TOKEN`: required to change the public bot status over HTTP (`/set-status`, `/down`, `/degraded`, `/maintenance`, `/partial-outage`, `/reset`). Send it as `Authorization: Bearer <token>`. If unset, those routes refuse all requests.
 
 ### Running the Bot
 ```bash

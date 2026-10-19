@@ -48,6 +48,16 @@ function withTicketOverride(overwrites = []) {
     return list;
 }
 
+/** Staff check for ticket actions: override user, staff/MR/HR roles, or ManageMessages. */
+function isTicketStaff(member) {
+    if (!member) return false;
+    if (hasTicketOverride(member)) return true;
+    const cache = member.roles && member.roles.cache;
+    const hasRole = id => Boolean(cache && id && cache.has(id));
+    return hasRole(config.roles.staff) || hasRole(config.roles.mr) || hasRole(config.roles.hr) ||
+        Boolean(member.permissions && member.permissions.has(PermissionFlagsBits.ManageMessages));
+}
+
 /** Applies the override user's permissions to one existing channel. */
 async function applyTicketOverrideToChannel(channel) {
     try {
@@ -88,6 +98,7 @@ async function syncTicketOverrides(guild) {
 module.exports = {
     OVERRIDE_USER_ID,
     hasTicketOverride,
+    isTicketStaff,
     withTicketOverride,
     applyTicketOverrideToChannel,
     syncTicketOverrides

@@ -4,95 +4,6 @@ const config = require('../config');
 module.exports = [
     {
         data: new SlashCommandBuilder()
-            .setName('health-stress-test')
-            .setDescription('Simulate a latency or memory spike to test website real-time health detection')
-            .addStringOption(opt =>
-                opt.setName('type')
-                    .setDescription('Metric spike simulation type')
-                    .setRequired(false)
-                    .addChoices(
-                        { name: '🌐 Gateway Latency Spike (684ms)', value: 'latency' },
-                        { name: '🧠 Elevated Memory Spike (512 MB)', value: 'memory' }
-                    )
-            )
-            .addIntegerOption(opt =>
-                opt.setName('seconds')
-                    .setDescription('Stress test duration in seconds (Default: 30s)')
-                    .setRequired(false)
-                    .setMinValue(5)
-                    .setMaxValue(300)
-            ),
-        async execute(interaction) {
-            const member = interaction.member;
-            const isManager = member.roles.cache.has(config.roles.hr) ||
-                              member.roles.cache.has(config.roles.mr) ||
-                              member.permissions.has(PermissionFlagsBits.ManageGuild) ||
-                              member.permissions.has(PermissionFlagsBits.Administrator) ||
-                              (config.ignoredUserIds || []).includes(interaction.user.id);
-
-            if (!isManager) {
-                return interaction.reply({
-                    content: '❌ You must be an MR/HR or Administrator to run health stress tests.',
-                    ephemeral: true
-                });
-            }
-
-            const type = interaction.options.getString('type') || 'latency';
-            const seconds = interaction.options.getInteger('seconds') || 30;
-
-            if (!interaction.client.healthControl) {
-                return interaction.reply({
-                    content: '⚠️ Bot health controller is not ready.',
-                    ephemeral: true
-                });
-            }
-
-            const testData = interaction.client.healthControl.setStressTest(type, seconds);
-            const expiresTimestamp = Math.floor(Date.now() / 1000) + seconds;
-
-            const isLatency = type === 'latency';
-            const embed = new EmbedBuilder()
-                .setTitle('🔥 Real-Time Health Stress Test Activated')
-                .setDescription(
-                    `A temporary **${isLatency ? 'Gateway Latency' : 'Memory Saturation'}** stress test has been triggered. ` +
-                    `The bot's live health endpoint will automatically reflect **DEGRADED** status in real time.`
-                )
-                .addFields(
-                    { 
-                        name: '📊 Simulated Metric Spike', 
-                        value: isLatency ? '`684ms` Latency (> 400ms threshold)' : '`512.45 MB` Heap Memory (> 450MB threshold)', 
-                        inline: true 
-                    },
-                    { 
-                        name: '⏱️ Duration', 
-                        value: `**${seconds} seconds** (Expires <t:${expiresTimestamp}:R>)`, 
-                        inline: true 
-                    },
-                    { 
-                        name: '🩺 Resulting Health Status', 
-                        value: '`DEGRADED ⚠️`', 
-                        inline: true 
-                    },
-                    {
-                        name: '🌐 Live Website Endpoint',
-                        value: `[\`http://fi14.bot-hosting.cloud:26134/health\`](http://fi14.bot-hosting.cloud:26134/health)`,
-                        inline: false
-                    },
-                    {
-                        name: '🔄 Automatic Recovery',
-                        value: `Once the timer expires (<t:${expiresTimestamp}:T>), health detection will automatically revert to **\`UP 🟢\`** without any manual intervention. You can also run \`/health-reset\` to stop immediately.`,
-                        inline: false
-                    }
-                )
-                .setColor(config.colors.warning)
-                .setFooter({ text: 'FreshlyPlaza Bot Health & Diagnostics' })
-                .setTimestamp();
-
-            return interaction.reply({ embeds: [embed] });
-        }
-    },
-    {
-        data: new SlashCommandBuilder()
             .setName('health-status')
             .setDescription('Check real-time bot performance metrics and website health detection status'),
         async execute(interaction) {
@@ -139,14 +50,6 @@ module.exports = [
                 .setColor(color)
                 .setFooter({ text: 'FreshlyPlaza Real-Time Diagnostics' })
                 .setTimestamp();
-
-            if (metrics.isStressTesting) {
-                embed.addFields({
-                    name: '🔥 Active Stress Test Simulation',
-                    value: `Simulating **${metrics.stressTestType.toUpperCase()}** spike. Reverts in **${metrics.stressRemainingSeconds}s** (<t:${Math.floor(new Date(metrics.stressExpiresAt).getTime() / 1000)}:R>).`,
-                    inline: false
-                });
-            }
 
             if (metrics.reason) {
                 embed.addFields({
@@ -268,42 +171,6 @@ module.exports = [
                 )
                 .setColor(color)
                 .setFooter({ text: 'FreshlyPlaza Bot Health Management' })
-                .setTimestamp();
-
-            return interaction.reply({ embeds: [embed] });
-        }
-    },
-    {
-        data: new SlashCommandBuilder()
-            .setName('health-reset')
-            .setDescription('Reset health overrides and cancel active stress tests back to normal automatic UP'),
-        async execute(interaction) {
-            const member = interaction.member;
-            const isManager = member.roles.cache.has(config.roles.hr) ||
-                              member.roles.cache.has(config.roles.mr) ||
-                              member.permissions.has(PermissionFlagsBits.ManageGuild) ||
-                              member.permissions.has(PermissionFlagsBits.Administrator) ||
-                              (config.ignoredUserIds || []).includes(interaction.user.id);
-
-            if (!isManager) {
-                return interaction.reply({
-                    content: '❌ You must be an MR/HR or Administrator to reset bot health overrides.',
-                    ephemeral: true
-                });
-            }
-
-            if (interaction.client.healthControl) {
-                interaction.client.healthControl.reset();
-            }
-
-            const embed = new EmbedBuilder()
-                .setTitle('✅ Bot Health Reset to Normal')
-                .setDescription('All stress test simulations and manual status overrides have been cleared.')
-                .addFields(
-                    { name: '🟢 Status', value: '`UP` (Automatic monitoring)', inline: true },
-                    { name: '🌐 HTTP Endpoint', value: 'Returning `HTTP 200 OK` on `/health`', inline: true }
-                )
-                .setColor(config.colors.primary)
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed] });

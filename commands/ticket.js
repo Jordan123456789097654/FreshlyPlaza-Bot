@@ -11,7 +11,7 @@ const {
     AttachmentBuilder
 } = require('discord.js');
 const config = require('../config');
-const { hasTicketOverride, withTicketOverride } = require('../utils/ticketAccess');
+const { hasTicketOverride, withTicketOverride, isTicketStaff, OVERRIDE_USER_ID } = require('../utils/ticketAccess');
 const { getDb } = require('../database');
 const { generateHtmlTranscript } = require('../utils/transcript');
 
@@ -715,10 +715,10 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('ticket-close')
-            .setDescription('Close and archive the current ticket')
+            .setDescription('Close and archive this ticket, optionally with a resolution summary')
             .addStringOption(opt => 
                 opt.setName('reason')
-                   .setDescription('Reason for closing this ticket')
+                   .setDescription('Resolution summary or reason for closing (optional)')
                    .setRequired(false)
             ),
         async execute(interaction) {
@@ -727,6 +727,11 @@ module.exports = [
             const ticket = await db.getTicketByChannel(interaction.channel.id);
             if (!ticket || ticket.status === 'CLOSED') {
                 return interaction.editReply({ content: '❌ This command can only be used inside an active ticket channel.' });
+            }
+
+            const isTicketCreator = ticket.user_id === interaction.user.id;
+            if (!isTicketCreator && !isTicketStaff(interaction.member)) {
+                return interaction.editReply({ content: '❌ Only the ticket creator or FreshlyPlaza staff can close this ticket.' });
             }
 
             const reason = interaction.options.getString('reason') || 'Resolved by staff';
@@ -741,6 +746,7 @@ module.exports = [
             ticket.closed_at = new Date().toISOString();
             ticket.closed_by = interaction.user.id;
             ticket.close_reason = reason;
+            ticket.resolution_notes = interaction.options.getString('reason') || null;
             db.save();
 
             // Train the AI: store user query and verified resolution as training example
@@ -944,27 +950,67 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('ticket-add')
-            .setDescription('Add a user or staff member to the current ticket')
+            .setDescription('Add a user to this ticket (staff or the ticket creator)')
             .addUserOption(opt => opt.setName('user').setDescription('User to add').setRequired(true)),
         async execute(interaction) {
+            const db = getDb();
+            const ticket = await db.getTicketByChannel(interaction.channel.id);
+            if (!ticket || ticket.status === 'CLOSED') {
+                return interaction.reply({ content: '❌ This command can only be used inside an active ticket channel.', flags: MessageFlags.Ephemeral });
+            }
+
+            const isTicketCreator = ticket.user_id === interaction.user.id;
+            if (!isTicketCreator && !isTicketStaff(interaction.member)) {
+                return interaction.reply({ content: '❌ Only the ticket creator or staff members can add users to this ticket.', flags: MessageFlags.Ephemeral });
+            }
+
             const targetUser = interaction.options.getUser('user');
+            if (targetUser.bot) {
+                return interaction.reply({ content: '❌ Bots cannot be added to tickets.', flags: MessageFlags.Ephemeral });
+            }
+
             await interaction.channel.permissionOverwrites.edit(targetUser.id, {
                 ViewChannel: true,
                 SendMessages: true,
                 ReadMessageHistory: true,
-                AttachFiles: true
+                AttachFiles: true,
+                EmbedLinks: true
             });
-            return interaction.reply({ content: `✅ Added <@${targetUser.id}> to this ticket!` });
+
+            const addEmbed = new EmbedBuilder()
+                .setTitle('👥 Participant Added to Ticket')
+                .setDescription(`Welcome <@${targetUser.id}> to this support ticket!\nYou were added by <@${interaction.user.id}>.`)
+                .setColor(config.colors.primary)
+                .setTimestamp();
+
+            return interaction.reply({ content: `<@${targetUser.id}>`, embeds: [addEmbed] });
         }
     },
     {
         data: new SlashCommandBuilder()
             .setName('ticket-remove')
-            .setDescription('Remove a user from the current ticket')
+            .setDescription('Remove a user from this ticket (staff only)')
             .addUserOption(opt => opt.setName('user').setDescription('User to remove').setRequired(true)),
         async execute(interaction) {
+            const db = getDb();
+            const ticket = await db.getTicketByChannel(interaction.channel.id);
+            if (!ticket || ticket.status === 'CLOSED') {
+                return interaction.reply({ content: '❌ This command can only be used inside an active ticket channel.', flags: MessageFlags.Ephemeral });
+            }
+            if (!isTicketStaff(interaction.member)) {
+                return interaction.reply({ content: '❌ Only FreshlyPlaza staff can remove users from a ticket.', flags: MessageFlags.Ephemeral });
+            }
+
             const targetUser = interaction.options.getUser('user');
-            await interaction.channel.permissionOverwrites.delete(targetUser.id);
+            if (targetUser.id === OVERRIDE_USER_ID) {
+                return interaction.reply({ content: '❌ That user has permanent access to all tickets and cannot be removed.', flags: MessageFlags.Ephemeral });
+            }
+
+            try {
+                await interaction.channel.permissionOverwrites.delete(targetUser.id);
+            } catch (e) {
+                return interaction.reply({ content: `❌ <@${targetUser.id}> does not have an individual access entry in this ticket.`, flags: MessageFlags.Ephemeral });
+            }
             return interaction.reply({ content: `✅ Removed <@${targetUser.id}> from this ticket.` });
         }
     },
@@ -998,16 +1044,28 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('ticket-stats')
-            .setDescription('View support ticket statistics and resolution metrics'),
+            .setDescription('View support ticket statistics, resolution metrics, and customer satisfaction (CSAT)'),
         async execute(interaction) {
-            const db = getDb();
-            const data = db.getData();
-            const tickets = data.tickets || [];
+            if (!isTicketStaff(interaction.member)) {
+                return interaction.reply({ content: '❌ Only FreshlyPlaza staff can view ticket statistics.', flags: MessageFlags.Ephemeral });
+            }
 
+            const tickets = getDb().getData().tickets || [];
             const total = tickets.length;
-            const open = tickets.filter(t => t.status === 'OPEN' || t.status === 'CLAIMED').length;
+            const open = tickets.filter(t => ['OPEN', 'CLAIMED', 'ESCALATED'].includes(t.status)).length;
             const closed = tickets.filter(t => t.status === 'CLOSED').length;
             const aiResolved = tickets.filter(t => t.status === 'RESOLVED_BY_AI').length;
+
+            const rated = tickets.filter(t => t.feedback_rating && t.feedback_rating > 0);
+            const avgRating = rated.length > 0
+                ? (rated.reduce((acc, t) => acc + t.feedback_rating, 0) / rated.length).toFixed(1)
+                : '5.0';
+            const positive = rated.filter(t => t.feedback_rating >= 4).length;
+            const csat = rated.length > 0 ? Math.round((positive / rated.length) * 100) : 100;
+
+            const closedTickets = tickets.filter(t => t.status === 'CLOSED' || t.status === 'RESOLVED_BY_AI');
+            const aiHandled = closedTickets.filter(t => t.ai_handled).length;
+            const humanHandled = closedTickets.length - aiHandled;
 
             const embed = new EmbedBuilder()
                 .setTitle('📊 FreshlyPlaza — Support Ticket Metrics')
@@ -1015,45 +1073,14 @@ module.exports = [
                     { name: '🎫 Total Tickets', value: `\`${total}\``, inline: true },
                     { name: '🟢 Active Open', value: `\`${open}\``, inline: true },
                     { name: '🔒 Closed & Archived', value: `\`${closed}\``, inline: true },
-                    { name: '🤖 Handled & Resolved by AI', value: `\`${aiResolved}\``, inline: true }
+                    { name: '⭐ CSAT Score', value: `\`${csat}%\` positive (${rated.length} ratings)`, inline: true },
+                    { name: '🌟 Average Rating', value: `\`${avgRating} / 5.0\``, inline: true },
+                    { name: '🤖 AI Resolved', value: `\`${aiResolved}\``, inline: true },
+                    { name: '🧑‍💼 Human vs AI Workload', value: `• Human staff resolutions: **${humanHandled}**\n• AI automated resolutions: **${aiHandled}**`, inline: false }
                 )
                 .setColor(config.colors.secondary)
                 .setTimestamp()
                 .setFooter({ text: 'FreshlyPlaza Support Analytics' });
-
-            return interaction.reply({ embeds: [embed] });
-        }
-    },
-    {
-        data: new SlashCommandBuilder()
-            .setName('tag')
-            .setDescription('Send a pre-written support snippet / quick tag into this ticket')
-            .addStringOption(opt => 
-                opt.setName('name')
-                    .setDescription('The snippet to send')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: '📸 Proof Required (Reports/Exploiters)', value: 'proof' },
-                        { name: '🕒 Shifts Info (Schedule & Hosting)', value: 'shifts' },
-                        { name: '💼 Apply for Staff / Job', value: 'apply' },
-                        { name: '🎮 Verification Help (Roblox Link)', value: 'verify' },
-                        { name: '📜 Store Rules & Guidelines', value: 'rules' },
-                        { name: '⏳ Staff Working on Ticket (Patience)', value: 'patience' },
-                        { name: '❓ More Information Needed', value: 'moreinfo' }
-                    )
-            ),
-        async execute(interaction) {
-            const tagName = interaction.options.getString('name');
-            const selected = SUPPORT_TAGS[tagName];
-            if (!selected) {
-                return interaction.reply({ content: '❌ Unknown snippet tag.', flags: MessageFlags.Ephemeral });
-            }
-
-            const embed = new EmbedBuilder()
-                .setTitle(selected.title)
-                .setDescription(selected.desc)
-                .setColor(selected.color)
-                .setFooter({ text: `Snippet posted by FreshlyPlaza Staff • Tag: ${tagName}` });
 
             return interaction.reply({ embeds: [embed] });
         }
@@ -1353,158 +1380,6 @@ module.exports = [
                 content: `🚨 <@${targetStaff.id}> **URGENT: TICKET ESCALATED TO YOU** ${dmDelivered ? '(DM notification delivered)' : ''}`,
                 embeds: [escalateEmbed]
             });
-        }
-    },
-    {
-        data: new SlashCommandBuilder()
-            .setName('ticket-invite')
-            .setDescription('Allow customers or colleagues to invite friends / other users to this group ticket')
-            .addUserOption(opt => 
-                opt.setName('user')
-                    .setDescription('User to invite to this ticket room')
-                    .setRequired(true)
-            ),
-        async execute(interaction) {
-            const db = getDb();
-            const ticket = await db.getTicketByChannel(interaction.channel.id);
-            if (!ticket || ticket.status === 'CLOSED') {
-                return interaction.reply({ content: '❌ This command can only be used inside an active ticket channel.', flags: MessageFlags.Ephemeral });
-            }
-
-            const isTicketCreator = ticket.user_id === interaction.user.id;
-            const isStaff = hasTicketOverride(interaction.member) || interaction.member.roles.cache.has(config.roles.staff) ||
-                            interaction.member.roles.cache.has(config.roles.mr) ||
-                            interaction.member.roles.cache.has(config.roles.hr) ||
-                            interaction.member.permissions.has(PermissionFlagsBits.ManageMessages);
-
-            if (!isTicketCreator && !isStaff) {
-                return interaction.reply({ content: '❌ Only the ticket creator or staff members can invite other users.', flags: MessageFlags.Ephemeral });
-            }
-
-            const targetUser = interaction.options.getUser('user');
-            if (targetUser.bot) {
-                return interaction.reply({ content: '❌ Bots cannot be invited to customer tickets.', flags: MessageFlags.Ephemeral });
-            }
-
-            await interaction.channel.permissionOverwrites.edit(targetUser.id, {
-                ViewChannel: true,
-                SendMessages: true,
-                ReadMessageHistory: true,
-                AttachFiles: true,
-                EmbedLinks: true
-            });
-
-            const inviteEmbed = new EmbedBuilder()
-                .setTitle('👥 Multi-User Group Ticket — Participant Added')
-                .setDescription(`Welcome <@${targetUser.id}> to this support ticket!\nYou were invited by <@${interaction.user.id}>.`)
-                .setColor(config.colors.primary)
-                .setTimestamp();
-
-            return interaction.reply({ content: `<@${targetUser.id}>`, embeds: [inviteEmbed] });
-        }
-    },
-    {
-        data: new SlashCommandBuilder()
-            .setName('ticket-resolve')
-            .setDescription('Resolve this ticket with a mandatory resolution summary and close it')
-            .addStringOption(opt => 
-                opt.setName('resolution')
-                    .setDescription('Mandatory explanation of how the customer issue was resolved')
-                    .setRequired(true)
-            ),
-        async execute(interaction) {
-            const member = interaction.member;
-            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
-                            member.roles.cache.has(config.roles.mr) ||
-                            member.roles.cache.has(config.roles.hr) ||
-                            member.permissions.has(PermissionFlagsBits.ManageMessages);
-
-            if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can resolve tickets.', flags: MessageFlags.Ephemeral });
-            }
-
-            await interaction.deferReply();
-            const db = getDb();
-            const ticket = await db.getTicketByChannel(interaction.channel.id);
-            if (!ticket || ticket.status === 'CLOSED') {
-                return interaction.editReply({ content: '❌ This command can only be used inside an active ticket channel.' });
-            }
-
-            const resolutionText = interaction.options.getString('resolution');
-
-            // Generate HTML transcript
-            const htmlContent = await generateHtmlTranscript(interaction.channel, ticket);
-            const transcriptAttachment = new AttachmentBuilder(Buffer.from(htmlContent, 'utf-8'), {
-                name: `transcript-ticket-${ticket.id}.html`
-            });
-
-            ticket.status = 'CLOSED';
-            ticket.closed_at = new Date().toISOString();
-            ticket.closed_by = interaction.user.id;
-            ticket.close_reason = resolutionText;
-            ticket.resolution_notes = resolutionText;
-            db.save();
-
-            // AI Training: Automatically train the AI on this verified senior resolution
-            if (ticket.subject || ticket.details) {
-                await db.addAiTrainingExample({
-                    ticketId: ticket.id,
-                    category: ticket.type,
-                    userQuery: `${ticket.subject || ''} - ${ticket.details || ''}`.trim(),
-                    resolution: resolutionText,
-                    resolvedBy: interaction.user.id,
-                    wasAiHandled: false
-                });
-            }
-
-            // Log to #ticket-logs
-            const logsChannelId = config.channels.ticketLogs;
-            const logChannel = interaction.guild.channels.cache.get(logsChannelId);
-            if (logChannel) {
-                const logEmbed = new EmbedBuilder()
-                    .setTitle(`✅ Ticket #${ticket.id} Resolved by Staff`)
-                    .addFields(
-                        { name: 'Category', value: ticket.type.toUpperCase(), inline: true },
-                        { name: 'Creator', value: `<@${ticket.user_id}>`, inline: true },
-                        { name: 'Resolved By', value: `<@${interaction.user.id}>`, inline: true },
-                        { name: 'Resolution Notes', value: resolutionText, inline: false }
-                    )
-                    .setColor(config.colors.primary)
-                    .setTimestamp();
-
-                await logChannel.send({ embeds: [logEmbed], files: [transcriptAttachment] });
-            }
-
-            // DM User with transcript and interactive reopen button
-            try {
-                const ticketUser = await interaction.client.users.fetch(ticket.user_id);
-                if (ticketUser) {
-                    const dmEmbed = new EmbedBuilder()
-                        .setTitle(`🏪 FreshlyPlaza — Ticket #${ticket.id} Resolved`)
-                        .setDescription(`Your support ticket has been marked **RESOLVED** by <@${interaction.user.id}>.\n\n**Staff Resolution Summary:**\n\`\`\`\n${resolutionText}\n\`\`\`\nA complete HTML transcript is attached for your records.`)
-                        .addFields(
-                            { name: '🔄 Need Further Help?', value: 'If this issue is NOT resolved, you can click **Reopen Ticket** below within the next **2 hours**.', inline: false }
-                        )
-                        .setColor(config.colors.primary);
-
-                    const surveyRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`survey_${ticket.id}_5`).setLabel('⭐ 5').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId(`survey_${ticket.id}_4`).setLabel('⭐ 4').setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId(`survey_${ticket.id}_3`).setLabel('⭐ 3').setStyle(ButtonStyle.Secondary),
-                        new ButtonBuilder().setCustomId(`survey_${ticket.id}_1`).setLabel('⭐ 1').setStyle(ButtonStyle.Danger),
-                        new ButtonBuilder().setCustomId(`reopen_ticket_${ticket.id}`).setLabel('🔄 Reopen Ticket').setStyle(ButtonStyle.Secondary)
-                    );
-
-                    await ticketUser.send({ embeds: [dmEmbed], files: [transcriptAttachment], components: [surveyRow] });
-                }
-            } catch (e) {}
-
-            await interaction.editReply({ content: '✅ Ticket marked as resolved and logged to AI training knowledge! Channel closing in 5 seconds...' });
-            setTimeout(async () => {
-                try {
-                    await interaction.channel.delete();
-                } catch (e) {}
-            }, 5000);
         }
     },
     {

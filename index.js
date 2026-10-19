@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, Collection, ActivityType, EmbedBuilder } = re
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const crypto = require('crypto');
 const config = require('./config');
 const { initDatabase } = require('./database');
 const { handleInteraction } = require('./handlers/interactionHandler');
@@ -28,37 +29,9 @@ client.commands = new Collection();
 let overrideStatus = null; // null (normal/UP), 'MAINTENANCE', 'DOWN', 'DEGRADED', 'PARTIAL_OUTAGE'
 let overrideMessage = '';
 let overrideSetAt = null;
-let stressTestUntil = 0; // timestamp until when stress test simulation runs
-let stressTestType = 'latency'; // 'latency' or 'memory'
 
 // Centralized Health & Diagnostics Controller
 client.healthControl = {
-    setStressTest: (type = 'latency', seconds = 30, customReason = '') => {
-        stressTestUntil = Date.now() + (seconds * 1000);
-        stressTestType = type;
-        if (customReason) {
-            overrideMessage = customReason;
-        }
-        return {
-            active: true,
-            type: stressTestType,
-            duration_seconds: seconds,
-            expires_at: new Date(stressTestUntil).toISOString(),
-            reason: customReason || (type === 'memory' ? 'Simulated memory pressure spike (512 MB) for real-time health detection testing.' : 'Simulated gateway latency spike (684ms) for real-time health detection testing.')
-        };
-    },
-    getStressTest: () => {
-        const active = Date.now() < stressTestUntil;
-        return {
-            active,
-            type: stressTestType,
-            remainingSeconds: active ? Math.max(0, Math.ceil((stressTestUntil - Date.now()) / 1000)) : 0,
-            expires_at: active ? new Date(stressTestUntil).toISOString() : null
-        };
-    },
-    clearStressTest: () => {
-        stressTestUntil = 0;
-    },
     setOverride: (status, message = '') => {
         overrideStatus = status;
         overrideMessage = message;
@@ -92,7 +65,6 @@ client.healthControl = {
         overrideStatus = null;
         overrideMessage = '';
         overrideSetAt = null;
-        stressTestUntil = 0;
         if (client.isReady()) {
             client.user.setPresence({
                 activities: [{ name: 'FreshlyPlaza Grocery Store 🛒', type: ActivityType.Watching }],
@@ -108,14 +80,7 @@ client.healthControl = {
         const mem = process.memoryUsage();
         let memUsedMb = Math.round(mem.heapUsed / 1024 / 1024 * 100) / 100;
 
-        const isStressTesting = Date.now() < stressTestUntil;
-        if (isStressTesting) {
-            if (stressTestType === 'memory') {
-                memUsedMb = 512.45;
-            } else {
-                ping = 684;
-            }
-        }
+        const isStressTesting = false;
 
         let computedStatus = 'UP';
         let reason = '';
@@ -133,13 +98,6 @@ client.healthControl = {
             if (!isReady) {
                 computedStatus = 'INITIALIZING';
                 reason = 'Bot gateway client is initializing connection to Discord.';
-            } else if (isStressTesting) {
-                computedStatus = 'DEGRADED';
-                reason = overrideMessage || (
-                    stressTestType === 'memory'
-                        ? `Simulated memory pressure spike (${memUsedMb} MB / threshold 450 MB) for real-time health testing.`
-                        : `Simulated gateway latency spike (${ping}ms / threshold 400ms) for real-time health testing.`
-                );
             } else if (ping > 400) {
                 computedStatus = 'DEGRADED';
                 reason = `High Discord gateway latency detected (${ping}ms, exceeding 400ms threshold).`;
@@ -162,9 +120,9 @@ client.healthControl = {
             overrideMessage,
             overrideSetAt,
             isStressTesting,
-            stressTestType,
-            stressRemainingSeconds: isStressTesting ? Math.max(0, Math.ceil((stressTestUntil - Date.now()) / 1000)) : 0,
-            stressExpiresAt: isStressTesting ? new Date(stressTestUntil).toISOString() : null,
+            stressTestType: null,
+            stressRemainingSeconds: 0,
+            stressExpiresAt: null,
             ping,
             memUsedMb,
             memTotalMb: Math.round(mem.heapTotal / 1024 / 1024 * 100) / 100,
@@ -790,6 +748,27 @@ const server = http.createServer((req, res) => {
                fallback;
     };
 
+    // Routes that change the public bot status require HEALTH_API_TOKEN.
+    // Fail closed: if the token is not configured, nothing can change status over HTTP.
+    const STATUS_WRITE_ROUTES = [
+        '/set-status', '/override', '/status-set',
+        '/maintenance', '/set-maintenance',
+        '/down', '/offline', '/set-down',
+        '/degraded', '/set-degraded',
+        '/partial-outage', '/set-partial-outage', '/partial',
+        '/reset', '/normal', '/set-up'
+    ];
+    if (STATUS_WRITE_ROUTES.includes(pathname)) {
+        const expected = process.env.HEALTH_API_TOKEN || '';
+        const provided = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '') || (req.headers['x-api-token'] || '');
+        const authorized = expected.length > 0 && provided.length === expected.length &&
+            crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+        if (!authorized) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ success: false, error: 'Unauthorized: send the HEALTH_API_TOKEN as an Authorization: Bearer header.' }));
+        }
+    }
+
     // 1. Unified SET STATUS & WHY Endpoint
     if (pathname === '/set-status' || pathname === '/override' || pathname === '/status-set') {
         const rawStatus = (parsedUrl.searchParams.get('status') || '').toUpperCase().trim();
@@ -911,28 +890,6 @@ const server = http.createServer((req, res) => {
         }, null, 2));
     }
 
-    // 6. Trigger Stress Test Simulation (via HTTP)
-    if (pathname === '/stress-test' || pathname === '/test-health') {
-        const type = parsedUrl.searchParams.get('type') || 'latency'; // 'latency' or 'memory'
-        const seconds = parseInt(parsedUrl.searchParams.get('seconds') || '30', 10);
-        const reason = getReasonParam(parsedUrl, '');
-        const testData = client.healthControl.setStressTest(type, seconds, reason);
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({
-            success: true,
-            stress_test: {
-                active: true,
-                type: testData.type,
-                duration_seconds: testData.duration_seconds,
-                expires_at: testData.expires_at,
-                reason: testData.reason,
-                why: testData.reason
-            },
-            instruction: 'Watch http://fi14.bot-hosting.cloud:26134/health automatically transition to DEGRADED and return to UP once the timer expires!'
-        }, null, 2));
-    }
-
     // 7. RESET back to Normal / Automatic Mode
     if (pathname === '/reset' || pathname === '/normal' || pathname === '/set-up') {
         client.healthControl.reset();
@@ -942,14 +899,14 @@ const server = http.createServer((req, res) => {
             success: true,
             status: 'UP',
             mode: 'AUTOMATIC (UP)',
-            reason: 'All overrides and stress tests cleared. Automatic health monitoring active.',
-            why: 'All overrides and stress tests cleared. Automatic health monitoring active.',
+            reason: 'All overrides cleared. Automatic health monitoring active.',
+            why: 'All overrides cleared. Automatic health monitoring active.',
             note: 'Bot status has been reset to NORMAL / UP (HTTP 200 on /health).',
             timestamp: new Date().toISOString()
         }, null, 2));
     }
 
-    // 8. Main /health and /status Endpoint (Supports automatic detection & stress test)
+    // 8. Main /health and /status Endpoint (Supports automatic detection)
     if (pathname === '/health' || pathname === '/' || pathname === '/status') {
         const metrics = client.healthControl.getMetrics();
         const isHealthy = metrics.status === 'UP' || metrics.status === 'DEGRADED';
@@ -981,15 +938,6 @@ const server = http.createServer((req, res) => {
         if (metrics.overrideSetAt) {
             payload.mode_changed_at = metrics.overrideSetAt;
         }
-        if (metrics.isStressTesting) {
-            payload.stress_test = {
-                active: true,
-                type: metrics.stressTestType,
-                remaining_seconds: metrics.stressRemainingSeconds,
-                expires_at: metrics.stressExpiresAt,
-                reason: metrics.reason
-            };
-        }
 
         res.writeHead(httpStatusCode, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify(payload, null, 2));
@@ -1000,12 +948,12 @@ const server = http.createServer((req, res) => {
         error: 'Endpoint not found.',
         available_endpoints: {
             health: '/health (View current status and why/reason)',
+            note: 'Status-changing routes require an Authorization: Bearer <HEALTH_API_TOKEN> header.',
             set_status: '/set-status?status=MAINTENANCE|DOWN|DEGRADED|PARTIAL_OUTAGE|UP&reason=Why+status+is+set',
             maintenance: '/maintenance?reason=Scheduled+system+maintenance',
             down: '/down?reason=Emergency+host+failure',
             degraded: '/degraded?reason=Elevated+latency',
             partial_outage: '/partial-outage?service=Tickets&reason=Transcripts+failing',
-            stress_test: '/stress-test?type=latency|memory&seconds=30&reason=Drill',
             reset: '/reset (Restores automatic UP)'
         }
     }, null, 2));
