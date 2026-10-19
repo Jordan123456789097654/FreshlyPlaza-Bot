@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const config = require('../config');
+const { hasTicketOverride, withTicketOverride } = require('../utils/ticketAccess');
 const { getDb } = require('../database');
 const { buildVoteEmbed, buildVoteButtons, concludeShiftVote, buildStaffStationEmbed, buildStaffStationButtons } = require('../commands/shiftVote');
 const { broadcastLoaApproval } = require('../commands/loa');
@@ -599,7 +600,7 @@ async function handleInteraction(interaction) {
                     name: `reopened-${eligibleTicket.id}-${interaction.user.username}`.slice(0, 32),
                     type: ChannelType.GuildText,
                     parent: parentCategoryId,
-                    permissionOverwrites: [
+                    permissionOverwrites: withTicketOverride([
                         { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
                         { 
                             id: interaction.user.id, 
@@ -620,7 +621,7 @@ async function handleInteraction(interaction) {
                                 PermissionFlagsBits.ManageMessages
                             ] 
                         }
-                    ]
+                    ])
                 });
 
                 eligibleTicket.status = 'OPEN';
@@ -684,7 +685,7 @@ async function handleInteraction(interaction) {
         // Feature #4: Ticket Department Transfer Menu
         if (customId === 'btn_ticket_transfer_menu') {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has('ManageMessages');
@@ -709,7 +710,7 @@ async function handleInteraction(interaction) {
         // Ticket Quick Tags Snippet Menu
         if (customId === 'btn_ticket_snippets') {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has('ManageMessages');
@@ -1585,7 +1586,7 @@ async function handleInteraction(interaction) {
 
             if (catConfig.staffOnly) {
                 const isStaff = interaction.member && (
-                    interaction.member.roles.cache.has(config.roles.staff) ||
+                    hasTicketOverride(interaction.member) || interaction.member.roles.cache.has(config.roles.staff) ||
                     interaction.member.roles.cache.has(config.roles.mr) ||
                     interaction.member.roles.cache.has(config.roles.hr) ||
                     interaction.member.roles.cache.has(config.roles.trainee) ||
@@ -1669,7 +1670,7 @@ async function handleInteraction(interaction) {
                 name: `${categoryKey}-${interaction.user.username.toLowerCase()}`.slice(0, 32),
                 type: ChannelType.GuildText,
                 parent: parentCategoryId,
-                permissionOverwrites
+                permissionOverwrites: withTicketOverride(permissionOverwrites)
             });
 
             const { fetchRobloxUserProfile } = require('../utils/robloxLookup');
@@ -1701,7 +1702,7 @@ async function handleInteraction(interaction) {
             // Feature #5: Priority VIP / Colleague Lane (Fast Track)
             const openerMember = interaction.member;
             const isVipOrStaff = openerMember && (
-                openerMember.roles.cache.has(config.roles.staff) ||
+                hasTicketOverride(openerMember) || openerMember.roles.cache.has(config.roles.staff) ||
                 openerMember.roles.cache.has(config.roles.mr) ||
                 openerMember.roles.cache.has(config.roles.hr) ||
                 openerMember.premiumSince !== null || // Server Booster
@@ -1795,7 +1796,7 @@ async function handleInteraction(interaction) {
             }
 
             // Trigger AI Triage & Attempt to handle (bypassed if AI is disabled for this category)
-            if (ticketRecord.ai_disabled) {
+            if (ticketRecord.ai_disabled || !db.isAiEnabled()) {
                 return;
             }
 
@@ -2169,7 +2170,7 @@ async function handleInteraction(interaction) {
         const selectedCat = TICKET_CATEGORIES[type];
         if (selectedCat && selectedCat.staffOnly) {
             const isStaff = interaction.member && (
-                interaction.member.roles.cache.has(config.roles.staff) ||
+                hasTicketOverride(interaction.member) || interaction.member.roles.cache.has(config.roles.staff) ||
                 interaction.member.roles.cache.has(config.roles.mr) ||
                 interaction.member.roles.cache.has(config.roles.hr) ||
                 interaction.member.roles.cache.has(config.roles.trainee) ||
@@ -2276,7 +2277,7 @@ async function handleInteraction(interaction) {
                 name: `${categoryKey}-${interaction.user.username.toLowerCase()}`.slice(0, 32),
                 type: ChannelType.GuildText,
                 parent: parentCategoryId,
-                permissionOverwrites
+                permissionOverwrites: withTicketOverride(permissionOverwrites)
             });
 
             const ticketRecord = await db.createTicketRecord({

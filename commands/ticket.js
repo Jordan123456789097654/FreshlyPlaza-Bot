@@ -11,6 +11,7 @@ const {
     AttachmentBuilder
 } = require('discord.js');
 const config = require('../config');
+const { hasTicketOverride, withTicketOverride } = require('../utils/ticketAccess');
 const { getDb } = require('../database');
 const { generateHtmlTranscript } = require('../utils/transcript');
 
@@ -402,7 +403,7 @@ module.exports = [
 
             if (catConfig.staffOnly) {
                 const isStaff = interaction.member && (
-                    interaction.member.roles.cache.has(config.roles.staff) ||
+                    hasTicketOverride(interaction.member) || interaction.member.roles.cache.has(config.roles.staff) ||
                     interaction.member.roles.cache.has(config.roles.mr) ||
                     interaction.member.roles.cache.has(config.roles.hr) ||
                     interaction.member.roles.cache.has(config.roles.trainee) ||
@@ -486,7 +487,7 @@ module.exports = [
                 name: `${categoryKey}-${interaction.user.username.toLowerCase()}`.slice(0, 32),
                 type: ChannelType.GuildText,
                 parent: parentCategoryId,
-                permissionOverwrites
+                permissionOverwrites: withTicketOverride(permissionOverwrites)
             });
 
             const ticketRecord = await db.createTicketRecord({
@@ -561,7 +562,7 @@ module.exports = [
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const member = interaction.member;
             const isAuthorized = member.permissions.has(PermissionFlagsBits.ManageMessages) ||
-                                 member.roles.cache.has(config.roles.staff) ||
+                                 hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                                  member.roles.cache.has(config.roles.mr) ||
                                  member.roles.cache.has(config.roles.hr) ||
                                  (config.ignoredUserIds || []).includes(interaction.user.id);
@@ -589,7 +590,7 @@ module.exports = [
                 name: `forced-${targetUser.username.toLowerCase()}`.slice(0, 32),
                 type: ChannelType.GuildText,
                 parent: parentCategoryId,
-                permissionOverwrites: [
+                permissionOverwrites: withTicketOverride([
                     { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
                     { 
                         id: targetUser.id, 
@@ -621,7 +622,7 @@ module.exports = [
                             PermissionFlagsBits.ManageMessages
                         ] 
                     }
-                ]
+                ])
             });
 
             const ticketRecord = await db.createTicketRecord({
@@ -1064,7 +1065,7 @@ module.exports = [
             .addStringOption(opt => opt.setName('message').setDescription('Message to send as FreshlyPlaza Support').setRequired(true)),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -1193,7 +1194,7 @@ module.exports = [
             ),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -1277,7 +1278,7 @@ module.exports = [
             ),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -1371,7 +1372,7 @@ module.exports = [
             }
 
             const isTicketCreator = ticket.user_id === interaction.user.id;
-            const isStaff = interaction.member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(interaction.member) || interaction.member.roles.cache.has(config.roles.staff) ||
                             interaction.member.roles.cache.has(config.roles.mr) ||
                             interaction.member.roles.cache.has(config.roles.hr) ||
                             interaction.member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -1413,7 +1414,7 @@ module.exports = [
             ),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -1517,7 +1518,7 @@ module.exports = [
             ),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -1704,7 +1705,7 @@ module.exports = [
             ),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -1757,7 +1758,7 @@ module.exports = [
             ),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -1806,7 +1807,7 @@ module.exports = [
             ),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -1846,7 +1847,7 @@ module.exports = [
             ),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -1880,7 +1881,7 @@ module.exports = [
             ),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);

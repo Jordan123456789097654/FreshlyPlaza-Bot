@@ -3,6 +3,7 @@ const { getDb } = require('../database');
 const { handleTicketWithAI, translateText } = require('../utils/ticketAi');
 const { generateHtmlTranscript } = require('../utils/transcript');
 const config = require('../config');
+const { hasTicketOverride } = require('../utils/ticketAccess');
 
 // In-memory debounce set to avoid processing the same message or race conditions
 const processingMessages = new Set();
@@ -38,6 +39,7 @@ async function handleTicketChatMessage(message) {
 
     const isTicketCreator = message.author.id === ticket.user_id;
     const isStaffMember = !isTicketCreator && (
+        hasTicketOverride(message.member) ||
         message.member?.roles.cache.has(config.roles.staff) ||
         message.member?.roles.cache.has(config.roles.mr) ||
         message.member?.roles.cache.has(config.roles.hr) ||
@@ -91,7 +93,7 @@ async function handleTicketChatMessage(message) {
         att.contentType && (att.contentType.startsWith('image/png') || att.contentType.startsWith('image/jpeg') || att.contentType.startsWith('image/webp'))
     );
 
-    if (imageAttachments.size > 0 && !ticket.ai_disabled) {
+    if (imageAttachments.size > 0 && !ticket.ai_disabled && db.isAiEnabled()) {
         const analyzingMsg = await message.channel.send({
             content: `🔍 **FreshlyBot AI Vision:** Analyzing uploaded screenshot(s)...`
         });
@@ -185,7 +187,7 @@ async function handleTicketChatMessage(message) {
     // 3. MULTI-TURN AI RESOLUTION & ESCALATION SAFEGUARD
     // ==========================================
     // Only engage AI resolution if the message is from the ticket creator, ticket is NOT claimed by human staff, and AI is NOT disabled
-    if (isTicketCreator && !ticket.claimed_by && !ticket.ai_disabled) {
+    if (isTicketCreator && !ticket.claimed_by && !ticket.ai_disabled && db.isAiEnabled()) {
         // If message is just a quick reaction or command, skip
         const textContent = message.content.trim();
         if (textContent.length < 3 || textContent.startsWith('/')) return;

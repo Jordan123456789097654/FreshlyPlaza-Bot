@@ -813,6 +813,21 @@ const db = {
         return dbData.ticket_settings;
     },
 
+    // AI assistant on/off switch (persisted; falls back to config.ai.enabled when never changed)
+    isAiEnabled() {
+        loadDb();
+        const cfg = require('./config');
+        return typeof dbData.ai_enabled === 'boolean' ? dbData.ai_enabled : Boolean(cfg.ai && cfg.ai.enabled);
+    },
+
+    async setAiEnabled(enabled, changedBy = null) {
+        loadDb();
+        dbData.ai_enabled = Boolean(enabled);
+        dbData.ai_enabled_updated = { by: changedBy, at: new Date().toISOString() };
+        saveDb();
+        return dbData.ai_enabled;
+    },
+
     async getClosedTicketForReopen(userId, channelOrTicketId = null) {
         loadDb();
         if (!dbData.tickets) dbData.tickets = [];

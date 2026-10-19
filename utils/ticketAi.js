@@ -1,6 +1,11 @@
 const config = require('../config');
 const { getDb } = require('../database');
 
+/** Global AI on/off switch (set with /config ai). */
+function aiOn() {
+    return getDb().isAiEnabled();
+}
+
 /**
  * Groq AI Support Agent for FreshlyPlaza Support Tickets
  * Features:
@@ -98,6 +103,31 @@ You MUST return ONLY a valid JSON object with the following structure:
 }`;
 
 async function handleTicketWithAI(ticket, initialMessage, userTag, imageBuffers = []) {
+    if (!aiOn()) {
+        return {
+            can_handle: false,
+            confidence: 0,
+            escalation_reason: 'AI assistant is disabled by an administrator.',
+            resolution_message: 'Thank you for reaching out to FreshlyPlaza Support! A member of our human support team will review your ticket shortly.',
+            image_summary: null,
+            suggested_category: null,
+            is_known_bug: false,
+            matched_bug_title: null,
+            is_new_bug: false,
+            bug_title: null,
+            bug_steps: null,
+            sentiment: 'neutral',
+            urgency: 'NORMAL',
+            is_toxic: false,
+            is_toxic_extreme: false,
+            toxicity_warning: null,
+            requested_action: 'none',
+            action_payload: null,
+            detected_language: 'English',
+            english_translation: null
+        };
+    }
+
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
         return {
@@ -297,7 +327,7 @@ async function handleTicketWithAI(ticket, initialMessage, userTag, imageBuffers 
  */
 async function generateTicketSummary(ticket, messageHistoryText) {
     const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
+    if (!apiKey || !aiOn()) {
         return {
             core_issue: ticket.subject || ticket.details || 'Customer Inquiry',
             steps_tried: 'User opened ticket in ' + ticket.type + ' category.',
@@ -356,7 +386,7 @@ Structure:
  */
 async function generateStaffGhostwrite(ticket, lastCustomerMessage) {
     const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) return null;
+    if (!apiKey || !aiOn()) return null;
 
     try {
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -404,6 +434,8 @@ Return JSON:
  * Evaluates staff professionalism (1-10) and resolution quality upon ticket closure
  */
 async function evaluateTicketQA(ticket, transcriptText) {
+    // With AI off, skip grading entirely so no placeholder scores get recorded
+    if (!aiOn()) return null;
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
         return {
@@ -468,7 +500,7 @@ Return JSON:
  */
 async function translateText(text, targetLanguage = 'English') {
     const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey || !text || text.trim().length === 0) return null;
+    if (!apiKey || !aiOn() || !text || text.trim().length === 0) return null;
 
     try {
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {

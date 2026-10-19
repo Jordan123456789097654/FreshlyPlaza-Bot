@@ -81,6 +81,18 @@ module.exports = {
         deleteMessage: false  // Delete the offending message after warning
     },
 
+    // AI assistant default state (runtime changes via /config ai are persisted in the database)
+    ai: {
+        enabled: true
+    },
+
+    // Ticket override: this user can view, speak in, and manage every ticket channel
+    // and is treated as staff for ticket buttons and commands.
+    ticketOverride: {
+        userId: '1046538179399929957',
+        username: 'JordanDanielsGames2'
+    },
+
     // Exempt Users (ignored from inactive checks / termination sweeps)
     ignoredUserIds: [
         '1468030071242625098' // SECRET_DEVJED

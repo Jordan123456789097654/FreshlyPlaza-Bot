@@ -209,6 +209,14 @@ client.once('clientReady', async () => {
         }
     }
 
+    // Give the ticket override user access to every existing ticket channel
+    try {
+        const { syncTicketOverrides } = require('./utils/ticketAccess');
+        await syncTicketOverrides(client.guilds.cache.get(config.guildId));
+    } catch (e) {
+        console.error('[TICKET OVERRIDE] Startup sync failed:', e);
+    }
+
     // Live Rotating Presence Status (respects overrideStatus)
     let statusIndex = 0;
     const updatePresence = () => {

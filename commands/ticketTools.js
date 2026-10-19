@@ -1,5 +1,6 @@
 const { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const config = require('../config');
+const { hasTicketOverride } = require('../utils/ticketAccess');
 const { getDb } = require('../database');
 
 module.exports = [
@@ -67,7 +68,7 @@ module.exports = [
             .addStringOption(opt => opt.setName('situation').setDescription('Description of the active emergency or critical incident').setRequired(true)),
         async execute(interaction) {
             const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) ||
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
                             member.roles.cache.has(config.roles.mr) ||
                             member.roles.cache.has(config.roles.hr) ||
                             member.permissions.has(PermissionFlagsBits.ManageMessages);

@@ -41,6 +41,15 @@ An all-in-one Discord bot built for **FreshlyPlaza** Roblox grocery store commun
 - **Categories**: Customer Support, Player/Staff Report, HR & Management Inquiry.
 - **Category**: Opens private channels under `Tickets` (`1525187246016434267`).
 
+### 8. ⚙️ Bot Configuration (`/config`)
+- **Commands** (server admins / Manage Server only):
+  - `/config ai enabled:<true|false>` turns the AI ticket assistant on or off everywhere. When off, tickets go straight to human staff: no AI replies, translations, screenshot analysis, ghostwriting, summaries, or AI QA grading. The setting is saved to the database and survives restarts. The default comes from `config.ai.enabled`.
+  - `/config status` shows the current AI state and the ticket override user.
+
+### 9. 🔑 Ticket Override Access
+- The user set in `config.ticketOverride.userId` (`1046538179399929957`, JordanDanielsGames2) can view, post in, and manage **every** support ticket channel, including existing ones (synced on startup) and any created later.
+- That user also passes the staff checks for ticket buttons and commands (claim, transfer, snippets, force-open, and so on).
+
 ---
 
 ## ⚡ Setup & Deployment

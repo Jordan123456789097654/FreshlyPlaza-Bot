@@ -49,7 +49,7 @@ function parseStaffDataEntry(text, fallbackUserId) {
  * using Groq AI with a robust fallback.
  */
 async function fixSpagDataEntry(parsed) {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = getDb().isAiEnabled() ? process.env.GROQ_API_KEY : null;
     const correctionsSummary = [];
 
     // Local deterministic rule-based corrections (always executed first)
