@@ -79,26 +79,37 @@ module.exports = {
                 const session = await startIaRecording(channel, interaction.user, reason);
 
                 const alertEmbed = new EmbedBuilder()
-                    .setTitle('🔴 [INTERNAL AFFAIRS] START RECORDING')
+                    .setTitle('🔴 [INTERNAL AFFAIRS] AUDIO RECORDING & INVESTIGATION NOTICE')
                     .setDescription(
-                        `**Internal Affairs Audio Wiretap & Investigation Active**\n\n` +
-                        `The bot has connected to **${channel.name}** and initiated compliance audio monitoring.\n` +
-                        `An audible **"START RECORDING"** broadcast was announced in the channel.`
+                        `### ⚠️ Verbal Notice & Mandatory Consent Disclosure\n` +
+                        `*"Attention. Your voice is being recorded for an official Internal Affairs investigation, Case Docket **${session.id}**.* ` +
+                        `*By remaining in this voice channel, you consent to our Trust and Safety and Internal Affairs surveillance policies.* ` +
+                        `*All audio and statements are logged for thirty days and may be used as formal evidence in disciplinary review or termination proceedings.* ` +
+                        `*If you do not consent, you must disconnect immediately.* ` +
+                        `*START RECORDING."*\n\n` +
+                        `An audible **compliance broadcast** has been announced into the voice channel.`
                     )
                     .addFields(
                         { name: '🎙️ Monitored Channel', value: `<#${channel.id}> (\`${channel.name}\`)`, inline: true },
-                        { name: '🕵️ Case Officer', value: `<@${interaction.user.id}>`, inline: true },
+                        { name: '🕵️ Case Investigator', value: `<@${interaction.user.id}>`, inline: true },
                         { name: '📁 Case Docket ID', value: `\`${session.id}\``, inline: true },
                         { name: '📝 Stated Reason', value: reason, inline: false },
-                        { name: '⏳ Retention Policy', value: '30 Days (Compliant with FreshlyPlaza T&S Protocol)', inline: false }
+                        {
+                            name: '📜 Active Enforcement Policies',
+                            value: 
+                                `• **Policy 1 (Implied Consent):** Remaining in this channel constitutes voluntary legal consent to audio capture.\n` +
+                                `• **Policy 2 (Evidentiary Weight):** Audio and transcripts are admissible in staff disciplinary hearings and terminations.\n` +
+                                `• **Policy 3 (30-Day Retention):** Raw audio & speaker timelines are securely archived for 30 days under T&S protocol.\n` +
+                                `• **Policy 4 (Right to Disconnect):** Any user who does not consent must disconnect from this channel immediately.`
+                        }
                     )
                     .setColor(0xE74C3C)
-                    .setFooter({ text: 'Internal Affairs Division • FreshlyPlaza' })
+                    .setFooter({ text: 'FreshlyPlaza Internal Affairs Division • Case Surveillance Protocol' })
                     .setTimestamp();
 
                 // Send public notice into the voice channel's text chat
                 await channel.send({
-                    content: `🔴 **[INTERNAL AFFAIRS] START RECORDING** — This channel is currently being recorded and monitored for compliance by <@${interaction.user.id}>.`
+                    content: `🔴 **[INTERNAL AFFAIRS COMPLIANCE NOTICE]**\nYour voice is being recorded for official Internal Affairs investigation Docket **\`${session.id}\`**. By continuing to remain in this voice channel, you consent to FreshlyPlaza Trust & Safety audio monitoring policies. If you do not consent, you must disconnect immediately.`
                 }).catch(() => {});
 
                 const row = new ActionRowBuilder().addComponents(

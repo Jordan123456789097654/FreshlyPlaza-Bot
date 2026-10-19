@@ -22,9 +22,9 @@ if (!fs.existsSync(recordingsDir)) {
 const activeSessions = new Map();
 
 /**
- * Fetch TTS MP3 buffer for audible voice announcements
+ * Fetch TTS MP3 buffer for a single string chunk
  */
-function fetchTtsAudio(text) {
+function fetchTtsChunk(text) {
     return new Promise((resolve, reject) => {
         const encoded = encodeURIComponent(text);
         const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=${encoded}`;
@@ -40,11 +40,25 @@ function fetchTtsAudio(text) {
 }
 
 /**
+ * Fetch combined TTS audio buffer for one or multiple sentences
+ */
+async function fetchTtsAudio(sentences) {
+    const list = Array.isArray(sentences) ? sentences : [sentences];
+    const buffers = [];
+    for (const s of list) {
+        if (!s || !s.trim()) continue;
+        const b = await fetchTtsChunk(s.trim());
+        buffers.push(b);
+    }
+    return Buffer.concat(buffers);
+}
+
+/**
  * Plays TTS alert in the voice channel
  */
-async function playTtsAlert(connection, text) {
+async function playTtsAlert(connection, textOrSentences) {
     try {
-        const audioBuffer = await fetchTtsAudio(text);
+        const audioBuffer = await fetchTtsAudio(textOrSentences);
         const tempPath = path.join(recordingsDir, `tts-${Date.now()}.mp3`);
         fs.writeFileSync(tempPath, audioBuffer);
 
@@ -105,8 +119,16 @@ async function startIaRecording(voiceChannel, recordedBy, reason = 'Routine Inte
 
     activeSessions.set(guildId, session);
 
-    // Announce audibly in voice chat
-    await playTtsAlert(connection, 'START RECORDING. Internal Affairs audio recording is active.');
+    // Announce verbal compliance & consent disclosure before saying START RECORDING (< 30 seconds total, well under 3 minutes)
+    const disclaimerSentences = [
+        `Attention. Your voice is being recorded for an official Internal Affairs investigation, Case Docket ${sessionId.replace(/-/g, ' ')}.`,
+        'By remaining in this voice channel, you consent to our Trust and Safety and Internal Affairs surveillance policies.',
+        'All audio and statements are logged for thirty days and may be used as formal evidence in disciplinary review or termination proceedings.',
+        'If you do not consent, you must disconnect immediately.',
+        'START RECORDING.'
+    ];
+
+    await playTtsAlert(connection, disclaimerSentences);
 
     // Listen to speaking events
     const receiver = connection.receiver;
