@@ -712,6 +712,12 @@ client.on('messageDelete', async (message) => {
     await handleGhostPing(message);
 });
 
+// 🕵️ Internal Affairs (IA): Real-Time Audit Log & Staff Abuse Scanner
+const { handleAuditLogEntry } = require('./handlers/iaAuditScanner');
+client.on('guildAuditLogEntryCreate', async (entry, guild) => {
+    await handleAuditLogEntry(entry, guild);
+});
+
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);

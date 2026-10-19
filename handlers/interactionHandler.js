@@ -1325,6 +1325,66 @@ async function handleInteraction(interaction) {
             return interaction.reply({ content: `✅ LOA Request **#${loa.id}** submitted to HR!`, ephemeral: true });
         }
 
+        // Anonymous IA Whistleblower Modal
+        if (customId === 'modal_ia_whistleblow_submit') {
+            await interaction.deferReply({ ephemeral: true });
+
+            const accused = interaction.fields.getTextInputValue('wb_accused');
+            const category = interaction.fields.getTextInputValue('wb_category');
+            const details = interaction.fields.getTextInputValue('wb_details');
+            const evidence = interaction.fields.getTextInputValue('wb_evidence') || 'None provided';
+
+            const token = `WB-${Date.now().toString().slice(-4)}-${Math.floor(Math.random()*900)+100}`;
+
+            const reportRecord = {
+                token,
+                accused,
+                category,
+                details,
+                evidence,
+                status: 'PENDING_REVIEW',
+                submitted_at: new Date().toISOString()
+            };
+
+            await db.addIaWhistleblow(reportRecord);
+
+            // Forward to Trust & Safety server #ia-staff-case-dockets
+            const tsGuild = interaction.client.guilds.cache.get('1561767415044378694');
+            if (tsGuild) {
+                const docketCh = tsGuild.channels.cache.find(c => c.name.includes('ia-staff-case-dockets'));
+                if (docketCh) {
+                    const alertEmbed = new EmbedBuilder()
+                        .setTitle(`🚨 [ANONYMOUS WHISTLEBLOWER DISCLOSURE] Token: ${token}`)
+                        .setDescription(
+                            `A confidential staff whistleblower report has been received by the Internal Affairs Division.\n\n` +
+                            `**Accused Subject:** \`${accused}\`\n` +
+                            `**Violation Category:** \`${category}\`\n` +
+                            `**Verification Token:** \`${token}\`\n\n` +
+                            `**Confidential Statement:**\n\`\`\`\n${details}\n\`\`\`\n` +
+                            `**Attached Evidence Links:**\n${evidence}`
+                        )
+                        .setColor(0x1A5276)
+                        .setFooter({ text: 'FreshlyPlaza IA Whistleblower Protection Protocol' })
+                        .setTimestamp();
+
+                    await docketCh.send({ embeds: [alertEmbed] }).catch(() => {});
+                }
+            }
+
+            const confirmEmbed = new EmbedBuilder()
+                .setTitle('🔒 Whistleblower Submission Received')
+                .setDescription(
+                    `Your confidential disclosure has been safely delivered to the **Chief of Internal Affairs**.\n\n` +
+                    `Your identity is **100% protected** and is not attached to this report.\n\n` +
+                    `**Your Anonymous Case Token:**\n\`\`\`\n${token}\n\`\`\`\n` +
+                    `Keep this token safe. You can use it to reference this case with Internal Affairs leadership.`
+                )
+                .setColor(0x2ECC71)
+                .setFooter({ text: 'FreshlyPlaza Internal Affairs Anti-Retaliation Guarantee' });
+
+            return interaction.followUp({ embeds: [confirmEmbed] });
+        }
+
         // Verify Account Modal
         if (customId === 'modal_verify_account') {
             await interaction.deferReply({ ephemeral: true });

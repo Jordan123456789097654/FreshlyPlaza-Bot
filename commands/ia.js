@@ -47,6 +47,24 @@ module.exports = {
                         .setDescription('The IA Recording Case ID (e.g. IA-REC-123456)')
                         .setRequired(true)
                 )
+        )
+        .addSubcommand(sub =>
+            sub.setName('speak')
+                .setDescription('Broadcast custom text-to-speech audio into the recorded voice channel.')
+                .addStringOption(opt =>
+                    opt.setName('message')
+                        .setDescription('The text message for the bot to speak aloud in voice')
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand(sub =>
+            sub.setName('flag')
+                .setDescription('Insert a live timestamped incident marker into the active recording.')
+                .addStringOption(opt =>
+                    opt.setName('note')
+                        .setDescription('Description of the incident or breach observed')
+                        .setRequired(true)
+                )
         ),
 
     async execute(interaction) {
@@ -236,6 +254,41 @@ module.exports = {
                 .setFooter({ text: 'Download the attached file to open the synchronized video player & transcript.' });
 
             return interaction.followUp({ embeds: [viewEmbed], files: [att] });
+        }
+
+        // ──────────────────────────────────────────────
+        // 5. SUBCOMMAND: CUSTOM TEXT-TO-SPEECH (SPEAK)
+        // ──────────────────────────────────────────────
+        if (sub === 'speak') {
+            await interaction.deferReply({ ephemeral: true });
+            const message = interaction.options.getString('message');
+            const { speakInRecording } = require('../utils/iaRecorder');
+
+            try {
+                const res = await speakInRecording(interaction.guild.id, message);
+                return interaction.followUp({
+                    content: `🔊 **Text-To-Speech Broadcast Dispatched** to \`#${res.channelName}\` (Session: \`${res.sessionId}\`):\n> *" ${message} "*`
+                });
+            } catch (err) {
+                return interaction.followUp({ content: `❌ **Failed to speak in voice:** ${err.message}` });
+            }
+        }
+
+        // ──────────────────────────────────────────────
+        // 6. SUBCOMMAND: FLAG INCIDENT
+        // ──────────────────────────────────────────────
+        if (sub === 'flag') {
+            const note = interaction.options.getString('note');
+            const { flagActiveRecording } = require('../utils/iaRecorder');
+
+            try {
+                const flag = flagActiveRecording(interaction.guild.id, note, interaction.user);
+                return interaction.reply({
+                    content: `🚩 **Incident Marker Inserted** at **+${flag.timestamp}s** into active recording.\n**Note:** \`${note}\` (Logged by <@${interaction.user.id}>)`
+                });
+            } catch (err) {
+                return interaction.reply({ content: `❌ **Failed to flag recording:** ${err.message}`, ephemeral: true });
+            }
         }
     }
 };

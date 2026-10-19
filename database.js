@@ -24,7 +24,10 @@ let dbData = {
     customer_feedback: [],
     gtn_games: [],
     gtn_stats: {},
-    ia_recordings: []
+    ia_recordings: [],
+    ia_cases: [],
+    ia_whistleblows: [],
+    ia_audit_flags: []
 };
 
 function saveDb() {
@@ -1058,6 +1061,75 @@ const db = {
         const removed = initial - dbData.ia_recordings.length;
         if (removed > 0) saveDb();
         return removed;
+    },
+
+    // Internal Affairs Cases (Dockets)
+    async addIaCase(caseData) {
+        loadDb();
+        if (!dbData.ia_cases) dbData.ia_cases = [];
+        dbData.ia_cases.push(caseData);
+        saveDb();
+        return caseData;
+    },
+
+    async getIaCase(id) {
+        loadDb();
+        if (!dbData.ia_cases) dbData.ia_cases = [];
+        return dbData.ia_cases.find(c => c.id.toUpperCase() === id.toUpperCase());
+    },
+
+    async updateIaCase(id, updateData) {
+        loadDb();
+        if (!dbData.ia_cases) dbData.ia_cases = [];
+        const index = dbData.ia_cases.findIndex(c => c.id.toUpperCase() === id.toUpperCase());
+        if (index === -1) return null;
+        dbData.ia_cases[index] = { ...dbData.ia_cases[index], ...updateData, updated_at: new Date().toISOString() };
+        saveDb();
+        return dbData.ia_cases[index];
+    },
+
+    async listIaCases(status = null, limit = 25) {
+        loadDb();
+        if (!dbData.ia_cases) dbData.ia_cases = [];
+        let list = [...dbData.ia_cases];
+        if (status) {
+            list = list.filter(c => c.status.toLowerCase() === status.toLowerCase());
+        }
+        return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, limit);
+    },
+
+    // Anonymous IA Whistleblower Hotline
+    async addIaWhistleblow(reportData) {
+        loadDb();
+        if (!dbData.ia_whistleblows) dbData.ia_whistleblows = [];
+        dbData.ia_whistleblows.push(reportData);
+        saveDb();
+        return reportData;
+    },
+
+    async getIaWhistleblow(token) {
+        loadDb();
+        if (!dbData.ia_whistleblows) dbData.ia_whistleblows = [];
+        return dbData.ia_whistleblows.find(w => w.token === token);
+    },
+
+    // IA Staff Abuse & Audit Flags
+    async addIaAuditFlag(flag) {
+        loadDb();
+        if (!dbData.ia_audit_flags) dbData.ia_audit_flags = [];
+        dbData.ia_audit_flags.push(flag);
+        // Keep max 500 flags
+        if (dbData.ia_audit_flags.length > 500) {
+            dbData.ia_audit_flags = dbData.ia_audit_flags.slice(-500);
+        }
+        saveDb();
+        return flag;
+    },
+
+    async getIaAuditFlags(limit = 20) {
+        loadDb();
+        if (!dbData.ia_audit_flags) dbData.ia_audit_flags = [];
+        return [...dbData.ia_audit_flags].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, limit);
     }
 };
 

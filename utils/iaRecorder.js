@@ -528,8 +528,43 @@ function generateInteractivePlayerHtml(data) {
 </html>`;
 }
 
+/**
+ * Broadcasts custom text-to-speech announcement into the active voice channel
+ */
+async function speakInRecording(guildId, message) {
+    const session = activeSessions.get(guildId);
+    if (!session) {
+        throw new Error('No active Internal Affairs recording session found in this server.');
+    }
+    await playTtsAlert(session.connection, message);
+    return { success: true, sessionId: session.id, channelName: session.channelName };
+}
+
+/**
+ * Inserts a manual incident timestamp flag into an active recording
+ */
+function flagActiveRecording(guildId, note, flaggedBy) {
+    const session = activeSessions.get(guildId);
+    if (!session) {
+        throw new Error('No active Internal Affairs recording session found in this server.');
+    }
+    const elapsed = Math.round((Date.now() - new Date(session.startedAt).getTime()) / 100) / 10;
+    const flag = {
+        id: `FLAG-${Date.now().toString().slice(-4)}`,
+        timestamp: elapsed,
+        note,
+        flaggedBy: flaggedBy.tag || flaggedBy.username || flaggedBy.id,
+        createdAt: new Date().toISOString()
+    };
+    if (!session.flags) session.flags = [];
+    session.flags.push(flag);
+    return flag;
+}
+
 module.exports = {
     startIaRecording,
     stopIaRecording,
+    speakInRecording,
+    flagActiveRecording,
     activeSessions
 };
