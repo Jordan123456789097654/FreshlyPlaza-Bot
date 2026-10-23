@@ -720,6 +720,34 @@ client.on('guildAuditLogEntryCreate', async (entry, guild) => {
     await handleAuditLogEntry(entry, guild);
 });
 
+// 🎭 Auto-Role on Member Join
+client.on('guildMemberAdd', async (member) => {
+    try {
+        if (member.user.bot) return;
+
+        const { getDb } = require('./database');
+        const db = getDb();
+        const dbRoles = db.getAutoRoles();
+        const targetRoleIds = dbRoles.length > 0 ? dbRoles : (config.autoRoles || [config.roles.customer]);
+
+        const rolesToAdd = [];
+        for (const roleId of targetRoleIds) {
+            if (!roleId) continue;
+            const role = member.guild.roles.cache.get(roleId);
+            if (role) {
+                rolesToAdd.push(role);
+            }
+        }
+
+        if (rolesToAdd.length > 0) {
+            await member.roles.add(rolesToAdd, 'Grandway Shopping Automated Onboarding Auto-Role');
+            console.log(`[AUTOROLE] Assigned ${rolesToAdd.map(r => r.name).join(', ')} to @${member.user.tag} (${member.id})`);
+        }
+    } catch (err) {
+        console.error(`[AUTOROLE ERROR] Could not assign auto-roles to @${member.user.tag}:`, err.message);
+    }
+});
+
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);

@@ -76,6 +76,11 @@ module.exports = {
         supportAppeals: '1560274579082182778'
     },
 
+    // Auto Roles assigned on member join
+    autoRoles: [
+        '1558519063737802842' // 🛍️ │ Store Customer
+    ],
+
     // LOA Ping Protection
     loaPing: {
         enabled: true,

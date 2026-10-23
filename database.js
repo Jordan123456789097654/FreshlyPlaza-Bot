@@ -27,7 +27,8 @@ let dbData = {
     ia_recordings: [],
     ia_cases: [],
     ia_whistleblows: [],
-    ia_audit_flags: []
+    ia_audit_flags: [],
+    auto_roles: []
 };
 
 function saveDb() {
@@ -508,6 +509,28 @@ const db = {
     },
 
     // Ticket System Database Helpers
+    
+    getAutoRoles() {
+        loadDb();
+        if (!dbData.auto_roles) dbData.auto_roles = [];
+        return dbData.auto_roles;
+    },
+    addAutoRole(roleId) {
+        loadDb();
+        if (!dbData.auto_roles) dbData.auto_roles = [];
+        if (!dbData.auto_roles.includes(roleId)) {
+            dbData.auto_roles.push(roleId);
+            saveDb();
+        }
+        return dbData.auto_roles;
+    },
+    removeAutoRole(roleId) {
+        loadDb();
+        if (!dbData.auto_roles) dbData.auto_roles = [];
+        dbData.auto_roles = dbData.auto_roles.filter(id => id !== roleId);
+        saveDb();
+        return dbData.auto_roles;
+    },
     async createTicketRecord({ channelId, userId, userTag, type, subject = '', details = '', robloxUsername = '', aiDisabled = false }) {
         loadDb();
         if (!dbData.tickets) dbData.tickets = [];
