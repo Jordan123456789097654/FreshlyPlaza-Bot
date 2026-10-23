@@ -820,13 +820,30 @@ async function handleInteraction(interaction) {
             db.save();
 
             const claimEmbed = new EmbedBuilder()
-                .setTitle('✋ Ticket Claimed')
-                .setDescription(`This ticket has been officially claimed by <@${interaction.user.id}>!`)
+                .setTitle('✋ ModMail Thread Claimed')
+                .setDescription(`This thread has been officially claimed by <@${interaction.user.id}>!`)
                 .setColor(config.colors.primary)
                 .setTimestamp();
 
             await interaction.channel.send({ embeds: [claimEmbed] });
-            return interaction.editReply({ content: `✅ You have claimed Ticket #${ticket.id}!` });
+
+            // Notify user in DM
+            try {
+                const targetUser = await interaction.client.users.fetch(ticket.user_id);
+                if (targetUser) {
+                    const claimDm = new EmbedBuilder()
+                        .setAuthor({
+                            name: ticket.anon_mode ? 'Grandway Shopping ModMail Team 🛡️' : `${interaction.user.username} (Staff Colleague)`,
+                            iconURL: ticket.anon_mode ? (interaction.guild.iconURL({ dynamic: true }) || undefined) : interaction.user.displayAvatarURL({ dynamic: true })
+                        })
+                        .setDescription(`✋ Your ModMail thread has been claimed by **${ticket.anon_mode ? 'an on-duty Colleague' : interaction.user.username}**. We are reviewing your inquiry!`)
+                        .setColor(config.colors.primary)
+                        .setTimestamp();
+                    await targetUser.send({ embeds: [claimDm] });
+                }
+            } catch (_) {}
+
+            return interaction.editReply({ content: `✅ You have claimed ModMail Thread #${ticket.id}!` });
         }
 
         // Feature #4: Ticket Department Transfer Menu
@@ -929,15 +946,41 @@ async function handleInteraction(interaction) {
                 return interaction.reply({ content: '❌ Could not retrieve suggested draft.', flags: MessageFlags.Ephemeral });
             }
 
-            // Post as staff message into ticket channel
-            await interaction.channel.send({
-                content: draftText
-            });
+            const shouldSendAnon = Boolean(ticket.anon_mode);
 
-            return interaction.reply({
-                content: '✅ Suggested response posted to ticket!',
-                flags: MessageFlags.Ephemeral
-            });
+            // Deliver to customer DM
+            try {
+                const targetUser = await interaction.client.users.fetch(ticket.user_id);
+                if (targetUser) {
+                    const dmEmbed = new EmbedBuilder()
+                        .setAuthor({
+                            name: shouldSendAnon ? 'Grandway Shopping ModMail Team 🛡️' : `${interaction.user.username} (Staff Colleague)`,
+                            iconURL: shouldSendAnon ? (interaction.guild.iconURL({ dynamic: true }) || undefined) : interaction.user.displayAvatarURL({ dynamic: true })
+                        })
+                        .setDescription(draftText)
+                        .setColor(config.colors.secondary)
+                        .setFooter({ text: shouldSendAnon ? 'Official ModMail Response • Support Staff ID Protected' : 'Grandway Shopping Staff Response' })
+                        .setTimestamp();
+                    await targetUser.send({ embeds: [dmEmbed] });
+                }
+            } catch (err) {
+                return interaction.reply({ content: `⚠️ Could not deliver to customer DMs: ${err.message}`, flags: MessageFlags.Ephemeral });
+            }
+
+            // Post receipt into staff channel
+            const receiptEmbed = new EmbedBuilder()
+                .setAuthor({
+                    name: `${interaction.user.username} (${shouldSendAnon ? 'Anonymous to Customer' : 'Signed'})`,
+                    iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                })
+                .setDescription(draftText)
+                .setColor(config.colors.secondary)
+                .setFooter({ text: 'AI Ghostwritten Response Relayed to Customer' })
+                .setTimestamp();
+
+            await interaction.channel.send({ embeds: [receiptEmbed] });
+
+            return interaction.reply({ content: '✅ Suggested response delivered to customer DMs!', flags: MessageFlags.Ephemeral });
         }
 
         // Ticket Close Prompt Button (shows confirmation modal)
@@ -1690,7 +1733,28 @@ async function handleInteraction(interaction) {
                 .setFooter({ text: 'Official ModMail Response • Support Staff ID Protected' })
                 .setTimestamp();
 
-            await interaction.channel.send({ embeds: [anonEmbed] });
+            // Deliver directly to customer DM
+            try {
+                const targetUser = await interaction.client.users.fetch(ticket.user_id);
+                if (targetUser) {
+                    await targetUser.send({ embeds: [anonEmbed] });
+                }
+            } catch (dmErr) {
+                return interaction.editReply({ content: `⚠️ **Delivery Failed:** <@${ticket.user_id}> has DMs closed or blocked.` });
+            }
+
+            // Post receipt into staff channel
+            const receiptEmbed = new EmbedBuilder()
+                .setAuthor({
+                    name: `${interaction.user.username} (Anonymous to Customer)`,
+                    iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                })
+                .setDescription(replyText)
+                .setColor(config.colors.secondary)
+                .setFooter({ text: 'Relayed to customer DM • Staff identity hidden in DM' })
+                .setTimestamp();
+
+            await interaction.channel.send({ embeds: [receiptEmbed] });
 
             await db.addTicketNote(interaction.channel.id, interaction.user.id, `[ANON REPLY (${interaction.user.tag})]: ${replyText}`);
 
@@ -1703,122 +1767,26 @@ async function handleInteraction(interaction) {
             return interaction.editReply({ content: '✅ Anonymous ModMail response dispatched to customer.' });
         }
 
-        // Modal for Ticket Close
+        // Modal for ModMail Close
         if (customId === 'modal_ticket_close') {
             await interaction.deferReply();
             const reason = interaction.fields.getTextInputValue('close_reason') || 'Resolved by user/staff';
             const ticket = await db.getTicketByChannel(interaction.channel.id);
             if (!ticket || ticket.status === 'CLOSED') {
-                return interaction.editReply({ content: '❌ Ticket not active.' });
+                return interaction.editReply({ content: '❌ ModMail thread is not active.' });
             }
 
-            const { generateHtmlTranscript } = require('../utils/transcript');
-            const { AttachmentBuilder } = require('discord.js');
-            const htmlContent = await generateHtmlTranscript(interaction.channel, ticket);
-            const transcriptAttachment = new AttachmentBuilder(Buffer.from(htmlContent, 'utf-8'), {
-                name: `transcript-ticket-${ticket.id}.html`
+            const { closeModmailThread } = require('./modmailHandler');
+            await closeModmailThread({
+                channel: interaction.channel,
+                ticket,
+                closedBy: interaction.user,
+                reason,
+                guild: interaction.guild,
+                client: interaction.client
             });
 
-            ticket.status = 'CLOSED';
-            ticket.closed_at = new Date().toISOString();
-            ticket.closed_by = interaction.user.id;
-            ticket.close_reason = reason;
-            db.save();
-
-            // Train the AI from resolved ticket
-            if (ticket.subject || ticket.details) {
-                await db.addAiTrainingExample({
-                    ticketId: ticket.id,
-                    category: ticket.type,
-                    userQuery: `${ticket.subject || ''} - ${ticket.details || ''}`.trim(),
-                    resolution: reason,
-                    resolvedBy: interaction.user.id,
-                    wasAiHandled: false
-                });
-            }
-
-            // Log to #ticket-logs and evaluate QA audit
-            const logsChannelId = config.channels.ticketLogs;
-            const logChannel = interaction.guild.channels.cache.get(logsChannelId);
-            if (logChannel) {
-                const logEmbed = new EmbedBuilder()
-                    .setTitle(`📋 Ticket #${ticket.id} Closed & Archived`)
-                    .addFields(
-                        { name: 'Category', value: ticket.type.toUpperCase(), inline: true },
-                        { name: 'Creator', value: `<@${ticket.user_id}>`, inline: true },
-                        { name: 'Closed By', value: `<@${interaction.user.id}>`, inline: true },
-                        { name: 'Claimed By', value: ticket.claimed_by ? `<@${ticket.claimed_by}>` : 'None', inline: true },
-                        { name: 'Reason', value: reason, inline: false }
-                    )
-                    .setColor(config.colors.secondary)
-                    .setTimestamp();
-
-                // Feature #6: Post-Ticket AI QA Grader & Audit
-                try {
-                    const { evaluateTicketQA } = require('../utils/ticketAi');
-                    const qaResult = await evaluateTicketQA(ticket, htmlContent);
-                    if (qaResult) {
-                        await db.recordTicketQaAudit({
-                            ticket_id: ticket.id,
-                            category: ticket.type,
-                            staff_id: ticket.claimed_by || interaction.user.id,
-                            customer_id: ticket.user_id,
-                            professionalism_score: qaResult.professionalism_score,
-                            resolution_score: qaResult.resolution_score,
-                            feedback_notes: qaResult.feedback_notes,
-                            areas_of_improvement: qaResult.areas_of_improvement
-                        });
-
-                        logEmbed.addFields(
-                            {
-                                name: '📊 AI QA Audit Score',
-                                value: `• **Professionalism:** \`${qaResult.professionalism_score}/10\`\n• **Resolution Quality:** \`${qaResult.resolution_score}/10\`\n• **Feedback:** *${qaResult.feedback_notes}*\n• **Staff Coaching:** *${qaResult.areas_of_improvement}*`,
-                                inline: false
-                            }
-                        );
-                    }
-                } catch (qaErr) {
-                    console.error('[TICKET QA AUDIT ERROR]', qaErr.message);
-                }
-
-                await logChannel.send({ embeds: [logEmbed], files: [transcriptAttachment] });
-            }
-
-            // DM User
-            try {
-                const ticketUser = await interaction.client.users.fetch(ticket.user_id);
-                if (ticketUser) {
-                    const dmEmbed = new EmbedBuilder()
-                        .setTitle(`🏪 Grandway Shopping — Ticket #${ticket.id} Closed`)
-                        .setDescription(`Your support ticket has been closed.\nAn official transcript has been attached for your records.`)
-                        .addFields(
-                            { name: 'Reason', value: reason, inline: true },
-                            { name: 'Closed By', value: `<@${interaction.user.id}>`, inline: true }
-                        )
-                        .setColor(config.colors.primary);
-
-                    const surveyRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`survey_${ticket.id}_5`).setLabel('⭐ 5 (Excellent)').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId(`survey_${ticket.id}_4`).setLabel('⭐ 4 (Good)').setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId(`survey_${ticket.id}_3`).setLabel('⭐ 3 (Average)').setStyle(ButtonStyle.Secondary),
-                        new ButtonBuilder().setCustomId(`survey_${ticket.id}_1`).setLabel('⭐ 1 (Poor)').setStyle(ButtonStyle.Danger)
-                    );
-
-                    const reopenRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`btn_reopen_ticket_${ticket.id}`).setLabel('🔄 Re-Open Ticket (2h Grace Period)').setStyle(ButtonStyle.Secondary)
-                    );
-
-                    await ticketUser.send({ embeds: [dmEmbed], files: [transcriptAttachment], components: [surveyRow, reopenRow] });
-                }
-            } catch (e) {}
-
-            await interaction.editReply({ content: '🔒 Ticket closed. Deleting channel in 5 seconds...' });
-            setTimeout(async () => {
-                try {
-                    await interaction.channel.delete();
-                } catch (e) {}
-            }, 5000);
-            return;
+            return interaction.editReply({ content: '🔒 ModMail thread concluded and archived.' });
         }
 
         // Modal for Ticket Creation Intake
@@ -1921,6 +1889,10 @@ async function handleInteraction(interaction) {
         }
 
         const ticket = await db.getTicketByChannel(interaction.channel.id);
+        if (!ticket || ticket.status === 'CLOSED') {
+            return interaction.reply({ content: '❌ This ModMail thread is no longer active.', flags: MessageFlags.Ephemeral });
+        }
+
         const staffName = interaction.member?.displayName || interaction.user.username;
         const customerMention = ticket?.user_id ? `<@${ticket.user_id}>` : 'valued customer';
 
@@ -1929,14 +1901,53 @@ async function handleInteraction(interaction) {
             .replace(/\{customer\}/g, customerMention)
             .replace(/\{store\}/g, config.storeName || 'Grandway Shopping');
 
-        const embed = new EmbedBuilder()
+        const shouldSendAnon = Boolean(ticket.anon_mode);
+
+        const dmEmbed = new EmbedBuilder()
+            .setAuthor({
+                name: shouldSendAnon ? 'Grandway Shopping ModMail Team 🛡️' : `${staffName} (Staff Colleague)`,
+                iconURL: shouldSendAnon ? (interaction.guild.iconURL({ dynamic: true }) || undefined) : interaction.user.displayAvatarURL({ dynamic: true })
+            })
             .setTitle(selectedTag.title)
             .setDescription(formattedDesc)
             .setColor(selectedTag.color)
-            .setFooter({ text: `Snippet posted by staff (${interaction.user.username}) • Quick Tag: ${tagKey}` });
+            .setFooter({ text: shouldSendAnon ? 'Official ModMail Quick Tag • Staff ID Protected' : 'Grandway Shopping Staff Response' })
+            .setTimestamp();
 
-        await interaction.channel.send({ embeds: [embed] });
-        return interaction.reply({ content: `✅ Dispatched snippet **${selectedTag.title}** to this ticket!`, flags: MessageFlags.Ephemeral });
+        // Deliver to customer DM
+        try {
+            const targetUser = await interaction.client.users.fetch(ticket.user_id);
+            if (targetUser) {
+                await targetUser.send({ embeds: [dmEmbed] });
+            }
+        } catch (dmErr) {
+            return interaction.reply({ content: `⚠️ Could not deliver snippet to <@${ticket.user_id}> DMs (DMs closed or blocked).`, flags: MessageFlags.Ephemeral });
+        }
+
+        // Post receipt into staff channel
+        const staffReceiptEmbed = new EmbedBuilder()
+            .setAuthor({
+                name: `${interaction.user.username} (${shouldSendAnon ? 'Anonymous to Customer' : 'Signed'})`,
+                iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+            })
+            .setTitle(`⚡ Quick Tag Dispatched: ${selectedTag.title}`)
+            .setDescription(formattedDesc)
+            .setColor(selectedTag.color)
+            .setFooter({ text: `Dispatched to customer DM • ${shouldSendAnon ? 'Staff identity hidden' : 'Staff name shown'}` })
+            .setTimestamp();
+
+        await interaction.channel.send({ embeds: [staffReceiptEmbed] });
+
+        // Record for staff audit trail
+        await db.addTicketNote(interaction.channel.id, interaction.user.id, `[QUICK TAG (${tagKey})]: ${selectedTag.title}`);
+
+        ticket.last_staff_response_at = new Date().toISOString();
+        ticket.awaiting_customer = true;
+        ticket.customer_warned_at = null;
+        if (!ticket.first_response_at) ticket.first_response_at = new Date().toISOString();
+        db.save();
+
+        return interaction.reply({ content: `✅ Dispatched quick tag snippet **${selectedTag.title}** to customer DMs!`, flags: MessageFlags.Ephemeral });
     }
 
     // 2.6 SELECT MENU: TICKET DEPARTMENT TRANSFER

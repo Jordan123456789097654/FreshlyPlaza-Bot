@@ -21,13 +21,13 @@ const SUPPORT_TAGS = {
         title: '👋 Staff Intro: General Support',
         emoji: '👋',
         color: config.colors.primary,
-        desc: 'Hello {customer}! My name is **{staff}** from the Grandway Shopping Support Team.\n\nI will be assisting you with your ticket today. Please let me know how I can help or clarify your inquiry!'
+        desc: 'Hello {customer}! My name is **{staff}** from the Grandway Shopping Support Team.\n\nI will be assisting you with your ModMail thread today. Please let me know how I can help or clarify your inquiry!'
     },
     intro_investigating: {
         title: '🔍 Staff Intro: Under Investigation',
         emoji: '🔍',
         color: config.colors.secondary,
-        desc: 'Hello {customer}, my name is **{staff}**.\n\nI have claimed your ticket and am currently reviewing your provided details and checking our store logs. I will update you here shortly!'
+        desc: 'Hello {customer}, my name is **{staff}**.\n\nI have claimed your ModMail thread and am currently reviewing your provided details and checking our store logs. I will update you here shortly!'
     },
     intro_management: {
         title: '💼 Staff Intro: Management Handover',
@@ -45,19 +45,19 @@ const SUPPORT_TAGS = {
         title: '🕒 Grandway Shopping Shift Information',
         emoji: '🕒',
         color: config.colors.secondary,
-        desc: 'Grandway Shopping supermarket shifts are hosted daily by our management team!\n\n• Check <#1505309843219546223> for ongoing store shifts.\n• You can register for upcoming shift alerts or attend in-game at [Grandway Shopping Supermarket](https://www.roblox.com/games/76637220767393/FreshlyPlazza-V2).'
+        desc: `Grandway Shopping supermarket shifts are hosted daily by our management team!\n\n• Check <#${config.channels.shifts || '1558519067525124145'}> for ongoing store shifts.\n• You can register for upcoming shift alerts or attend in-game at [Grandway Shopping Supermarket](${config.robloxGameLink}).`
     },
     apply: {
         title: '💼 Staff & Developer Applications',
         emoji: '💼',
         color: config.colors.primary,
-        desc: 'Thank you for your interest in working with Grandway Shopping!\n\nApplications for Developer, Store Staff, and Management positions are reviewed directly by leadership here in support tickets.\n\nPlease provide your Roblox username, past portfolio/experience, and reasons for joining so our team can evaluate your application.'
+        desc: 'Thank you for your interest in working with Grandway Shopping!\n\nApplications for Developer, Store Staff, and Management positions are reviewed directly by leadership.\n\nPlease provide your Roblox username, past portfolio/experience, and reasons for joining so our team can evaluate your application.'
     },
     verify: {
         title: '🎮 Roblox Account Verification',
         emoji: '🎮',
         color: config.colors.neutral,
-        desc: 'To link your Roblox account with our Discord server:\n\n• Use the `/verify` command or visit <#1505203971839496344> (#verification).\n• Enter your Roblox username so our bot can sync your in-game store ranks and customer perks.'
+        desc: `To link your Roblox account with our Discord server:\n\n• Use the `/verify` command or visit <#${config.channels.verification || '1558519067525124141'}> (#verification).\n• Enter your Roblox username so our bot can sync your in-game store ranks and customer perks.`
     },
     tillbug: {
         title: '🛒 Self-Checkout & Register Issue Guide',
@@ -69,7 +69,7 @@ const SUPPORT_TAGS = {
         title: '⚖️ Moderation & Ban Appeal Guidelines',
         emoji: '⚖️',
         color: 0x1ABC9C,
-        desc: 'When submitting a formal moderation or ban appeal, please follow these guidelines:\n\n• State your Discord tag, Roblox username, and reason for the ban.\n• Wait at least **48 hours** before submitting your appeal.\n• Explain honestly what happened and how you will follow server rules going forward.'
+        desc: 'When submitting a formal moderation or ban appeal, please follow these guidelines:\n\n• State your Discord tag, Roblox username, and reason for the punishment.\n• Wait at least **48 hours** before submitting your appeal.\n• Explain honestly what happened and how you will follow server rules going forward.'
     },
     rules: {
         title: '📜 Store & Discord Rules',
@@ -81,25 +81,25 @@ const SUPPORT_TAGS = {
         title: '⏳ Our Team is Working on Your Request',
         emoji: '⏳',
         color: config.colors.secondary,
-        desc: 'Thank you for your patience! Support Colleague **{staff}** is reviewing your ticket and gathering the necessary details. We will be right with you.'
+        desc: 'Thank you for your patience! Support Colleague **{staff}** is reviewing your inquiry and gathering the necessary details. We will be right with you.'
     },
     moreinfo: {
         title: '❓ Additional Information Requested',
         emoji: '❓',
         color: config.colors.warning,
-        desc: 'In order for **{staff}** to assist you further, please provide additional details regarding your request:\n\n• What exactly occurred and when?\n• Any relevant Roblox usernames or screenshots?\n• Steps to reproduce if you are reporting a bug or till error.'
+        desc: 'In order for our team to assist you further, please provide additional details regarding your inquiry:\n\n• What exactly occurred and when?\n• Any relevant Roblox usernames or screenshots?\n• Steps to reproduce if you are reporting a bug or till error.'
     },
     resolved: {
         title: '✅ Issue Resolved / Anything Else?',
         emoji: '✅',
         color: config.colors.primary,
-        desc: 'It looks like this issue has been successfully resolved! Is there anything else **{staff}** can assist you with today before we close this ticket?'
+        desc: 'It looks like this issue has been successfully resolved! Is there anything else our team can assist you with today before we conclude this ModMail thread?'
     },
     closing_soon: {
         title: '🔒 Inactivity / Pending Closure Notice',
         emoji: '🔒',
         color: config.colors.neutral,
-        desc: 'Hello {customer}! We haven\'t heard back from you in a little while. If you no longer need assistance, this ticket will be closed shortly. Feel free to reply if you still need help!'
+        desc: 'Hello {customer}! We haven\'t heard back from you in a little while. If you no longer need assistance, this ModMail thread will be concluded shortly. Feel free to reply if you still need help!'
     }
 };
 
@@ -1386,16 +1386,36 @@ module.exports = [
 
             const embed = new EmbedBuilder()
                 .setAuthor({ 
-                    name: 'Grandway Shopping Support Team', 
-                    iconURL: interaction.guild.iconURL() || undefined 
+                    name: 'Grandway Shopping ModMail Team 🛡️', 
+                    iconURL: interaction.guild.iconURL({ dynamic: true }) || undefined 
                 })
                 .setDescription(replyText)
                 .setColor(config.colors.secondary)
-                .setFooter({ text: 'Official Grandway Shopping Support Response • Staff ID Protected' })
+                .setFooter({ text: 'Official ModMail Response • Support Staff ID Protected' })
                 .setTimestamp();
 
-            await interaction.channel.send({ embeds: [embed] });
-            return interaction.reply({ content: '✅ Anonymous support response dispatched.', flags: MessageFlags.Ephemeral });
+            // Deliver to user DM
+            try {
+                const targetUser = await interaction.client.users.fetch(ticket.user_id);
+                if (targetUser) {
+                    await targetUser.send({ embeds: [embed] });
+                }
+            } catch (err) {
+                return interaction.reply({ content: `⚠️ **Delivery Failed:** <@${ticket.user_id}> has DMs closed or blocked.`, flags: MessageFlags.Ephemeral });
+            }
+
+            const receiptEmbed = new EmbedBuilder()
+                .setAuthor({
+                    name: `${interaction.user.username} (Anonymous to Customer)`,
+                    iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                })
+                .setDescription(replyText)
+                .setColor(config.colors.secondary)
+                .setFooter({ text: 'Relayed to customer DM • Staff identity hidden in DM' })
+                .setTimestamp();
+
+            await interaction.channel.send({ embeds: [receiptEmbed] });
+            return interaction.reply({ content: '✅ Anonymous ModMail response dispatched to customer DMs.', flags: MessageFlags.Ephemeral });
         }
     },
     {
