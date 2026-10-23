@@ -60,6 +60,75 @@ async function handleTicketChatMessage(message) {
     }
 
     // ==========================================
+    // 0. STAFF ANONYMOUS CHAT & INTERNAL NOTES
+    // ==========================================
+    if (isStaffMember) {
+        const rawContent = (message.content || '').trim();
+        const isStaffNote = /^(?:!note|=note|\/\/)\s+/i.test(rawContent);
+        const isExplicitAnon = /^(?:!anon|=anon|=reply)\s+/i.test(rawContent);
+        const isAnonActive = Boolean(ticket.anon_mode);
+
+        // A. Internal Note Handling (!note <text>)
+        if (isStaffNote) {
+            const noteText = rawContent.replace(/^(?:!note|=note|\/\/)\s+/i, '').trim();
+            try { await message.delete(); } catch (_) {}
+            if (noteText.length > 0) {
+                await db.addTicketNote(message.channel.id, message.author.id, noteText);
+                const noteEmbed = new EmbedBuilder()
+                    .setAuthor({
+                        name: `🔒 Internal Staff Note — ${message.author.username}`,
+                        iconURL: message.author.displayAvatarURL({ dynamic: true })
+                    })
+                    .setDescription(noteText)
+                    .setColor(config.colors.warning)
+                    .setFooter({ text: 'Internal Staff Note • Not visible in customer transcript' })
+                    .setTimestamp();
+                await message.channel.send({ embeds: [noteEmbed] });
+            }
+            return;
+        }
+
+        // B. Staff Anonymous Reply (!anon <text> or when ticket.anon_mode is ON)
+        if ((isExplicitAnon || isAnonActive) && !rawContent.startsWith('/')) {
+            let cleanText = rawContent;
+            if (isExplicitAnon) {
+                cleanText = cleanText.replace(/^(?:!anon|=anon|=reply)\s+/i, '').trim();
+            }
+
+            if (cleanText.length > 0) {
+                try { await message.delete(); } catch (_) {}
+
+                const anonEmbed = new EmbedBuilder()
+                    .setAuthor({
+                        name: 'Grandway Shopping ModMail Team 🛡️',
+                        iconURL: message.guild.iconURL({ dynamic: true }) || undefined
+                    })
+                    .setDescription(cleanText)
+                    .setColor(config.colors.secondary)
+                    .setFooter({ text: 'Official ModMail Response • Support Staff ID Protected' })
+                    .setTimestamp();
+
+                let files = [];
+                if (message.attachments.size > 0) {
+                    files = Array.from(message.attachments.values()).map(att => att.url);
+                }
+
+                await message.channel.send({ embeds: [anonEmbed], files });
+
+                // Internal audit log
+                await db.addTicketNote(message.channel.id, message.author.id, `[ANON CHAT (${message.author.tag})]: ${cleanText}`);
+
+                ticket.last_staff_response_at = new Date().toISOString();
+                ticket.awaiting_customer = true;
+                ticket.customer_warned_at = null;
+                if (!ticket.first_response_at) ticket.first_response_at = new Date().toISOString();
+                db.save();
+                return;
+            }
+        }
+    }
+
+    // ==========================================
     // 1. DUAL TRANSLATION: STAFF TO CUSTOMER
     // ==========================================
     if (isStaffMember && !ticket.ai_disabled && ticket.detected_language && ticket.detected_language.toLowerCase() !== 'english') {

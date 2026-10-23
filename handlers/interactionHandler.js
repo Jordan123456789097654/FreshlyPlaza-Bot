@@ -23,6 +23,60 @@ async function handleInteraction(interaction) {
     const db = getDb();
 
     // 1. BUTTON INTERACTIONS
+    // DM ModMail Close Button
+    if (interaction.isButton() && interaction.customId.startsWith('btn_modmail_dm_close_')) {
+        await interaction.deferReply();
+        const ticketId = interaction.customId.replace('btn_modmail_dm_close_', '');
+        const ticket = await db.getTicketById(ticketId);
+        if (!ticket || ticket.status === 'CLOSED') {
+            return interaction.editReply({ content: 'ℹ️ This ModMail thread has already been closed.' });
+        }
+
+        const guild = interaction.client.guilds.cache.get(config.guildId);
+        const staffChannel = guild ? guild.channels.cache.get(ticket.channel_id) : null;
+        const { closeModmailThread } = require('./modmailHandler');
+
+        await closeModmailThread({
+            channel: staffChannel,
+            ticket,
+            closedBy: interaction.user,
+            reason: 'Closed by customer via DM button',
+            guild,
+            client: interaction.client
+        });
+
+        return interaction.editReply({ content: '🔒 ModMail thread closed. Thank you for contacting Grandway Shopping!' });
+    }
+
+    // DM ModMail Category Select Menu
+    if (interaction.isStringSelectMenu() && interaction.customId === 'dm_modmail_select_category') {
+        await interaction.deferReply();
+        const type = interaction.values[0];
+        const guild = interaction.client.guilds.cache.get(config.guildId);
+        if (!guild) {
+            return interaction.editReply({ content: '❌ Grandway Shopping primary guild could not be reached. Please try again later.' });
+        }
+
+        try {
+            const { createModmailThread } = require('./modmailHandler');
+            const { staffChannel, ticketRecord } = await createModmailThread({
+                guild,
+                user: interaction.user,
+                categoryKey: type,
+                subject: 'Direct Message ModMail',
+                client: interaction.client
+            });
+
+            return interaction.editReply({
+                content: '✅ **ModMail Thread Established!** You may now type your questions and upload files directly in this chat.'
+            });
+        } catch (err) {
+            return interaction.editReply({
+                content: `⚠️ ${err.message}`
+            });
+        }
+    }
+
     if (interaction.isButton()) {
         const customId = interaction.customId;
 
@@ -618,7 +672,7 @@ async function handleInteraction(interaction) {
                 return interaction.editReply({ content: '❌ Could not find Grandway Shopping server. Please open a ticket in the server.' });
             }
 
-            const { TICKET_CATEGORIES, buildTicketControlRow } = require('../commands/ticket');
+            const { TICKET_CATEGORIES, buildTicketControlRow, buildTicketControlRow2 } = require('../commands/ticket');
             const catConfig = TICKET_CATEGORIES[eligibleTicket.type] || TICKET_CATEGORIES.general;
             const targetRoleId = config.roles[catConfig.roleKey] || config.roles.staff;
 
@@ -676,7 +730,7 @@ async function handleInteraction(interaction) {
                 await reopenedChannel.send({
                     content: `<@${interaction.user.id}> <@&${targetRoleId}> 🔔 **TICKET REOPENED**`,
                     embeds: [reopenedEmbed],
-                    components: [buildTicketControlRow()]
+                    components: [buildTicketControlRow(ticketRecord?.anon_mode), buildTicketControlRow2()]
                 });
 
                 return interaction.editReply({
@@ -686,6 +740,66 @@ async function handleInteraction(interaction) {
                 console.error('[TICKET REOPEN ERROR]', err);
                 return interaction.editReply({ content: '❌ Failed to recreate ticket channel. Please open a new ticket via the support panel.' });
             }
+        }
+
+        // ModMail Anonymous Reply Button
+        if (customId === 'btn_modmail_anon_reply') {
+            const member = interaction.member;
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
+                            member.roles.cache.has(config.roles.mr) ||
+                            member.roles.cache.has(config.roles.hr) ||
+                            member.permissions.has('ManageMessages');
+            if (!isStaff) {
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can send anonymous ModMail replies.', flags: MessageFlags.Ephemeral });
+            }
+
+            const modal = new ModalBuilder()
+                .setCustomId('modal_modmail_anon_reply')
+                .setTitle('Anonymous ModMail Reply');
+
+            const input = new TextInputBuilder()
+                .setCustomId('anon_reply_content')
+                .setLabel('Staff Response Message')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Type your response to the user here. Your identity will remain hidden.')
+                .setRequired(true)
+                .setMaxLength(4000);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(input));
+            return interaction.showModal(modal);
+        }
+
+        // ModMail Toggle Anonymous Mode Button
+        if (customId === 'btn_modmail_toggle_anon') {
+            const member = interaction.member;
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
+                            member.roles.cache.has(config.roles.mr) ||
+                            member.roles.cache.has(config.roles.hr) ||
+                            member.permissions.has('ManageMessages');
+            if (!isStaff) {
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can toggle anonymous chat mode.', flags: MessageFlags.Ephemeral });
+            }
+
+            const ticket = await db.getTicketByChannel(interaction.channel.id);
+            if (!ticket || ticket.status === 'CLOSED') {
+                return interaction.reply({ content: '❌ This ModMail thread is no longer active.', flags: MessageFlags.Ephemeral });
+            }
+
+            ticket.anon_mode = !ticket.anon_mode;
+            db.save();
+
+            const statusText = ticket.anon_mode ? 'ENABLED 🟢' : 'DISABLED ⚪';
+            await interaction.reply({
+                content: `🕵️ **Anonymous Chat Mode** is now **${statusText}** for this thread.\n${ticket.anon_mode ? '• Every message you send here will be automatically converted to an anonymous ModMail reply and deleted.' : '• Your messages will display your normal username and avatar.'}`,
+                flags: MessageFlags.Ephemeral
+            });
+
+            const noticeEmbed = new EmbedBuilder()
+                .setDescription(`🎭 **Staff Anonymous Chat Mode** has been toggled **${statusText}** by <@${interaction.user.id}>.`)
+                .setColor(ticket.anon_mode ? config.colors.primary : config.colors.neutral);
+
+            await interaction.channel.send({ embeds: [noticeEmbed] });
+            return;
         }
 
         // Ticket Claim Button
@@ -1547,6 +1661,48 @@ async function handleInteraction(interaction) {
             });
         }
 
+        // Modal for Anonymous ModMail Reply
+        if (customId === 'modal_modmail_anon_reply') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const member = interaction.member;
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
+                            member.roles.cache.has(config.roles.mr) ||
+                            member.roles.cache.has(config.roles.hr) ||
+                            member.permissions.has('ManageMessages');
+            if (!isStaff) {
+                return interaction.editReply({ content: '❌ Only Grandway Shopping Staff can send anonymous ModMail replies.' });
+            }
+
+            const ticket = await db.getTicketByChannel(interaction.channel.id);
+            if (!ticket || ticket.status === 'CLOSED') {
+                return interaction.editReply({ content: '❌ This ModMail thread is no longer active.' });
+            }
+
+            const replyText = interaction.fields.getTextInputValue('anon_reply_content');
+
+            const anonEmbed = new EmbedBuilder()
+                .setAuthor({
+                    name: 'Grandway Shopping ModMail Team 🛡️',
+                    iconURL: interaction.guild.iconURL({ dynamic: true }) || undefined
+                })
+                .setDescription(replyText)
+                .setColor(config.colors.secondary)
+                .setFooter({ text: 'Official ModMail Response • Support Staff ID Protected' })
+                .setTimestamp();
+
+            await interaction.channel.send({ embeds: [anonEmbed] });
+
+            await db.addTicketNote(interaction.channel.id, interaction.user.id, `[ANON REPLY (${interaction.user.tag})]: ${replyText}`);
+
+            ticket.last_staff_response_at = new Date().toISOString();
+            ticket.awaiting_customer = true;
+            ticket.customer_warned_at = null;
+            if (!ticket.first_response_at) ticket.first_response_at = new Date().toISOString();
+            db.save();
+
+            return interaction.editReply({ content: '✅ Anonymous ModMail response dispatched to customer.' });
+        }
+
         // Modal for Ticket Close
         if (customId === 'modal_ticket_close') {
             await interaction.deferReply();
@@ -1666,432 +1822,40 @@ async function handleInteraction(interaction) {
         }
 
         // Modal for Ticket Creation Intake
+        // Modal for ModMail Creation Intake
         if (customId.startsWith('modal_create_ticket_')) {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const categoryKey = customId.replace('modal_create_ticket_', '');
-            const subject = interaction.fields.getTextInputValue('ticket_subject') || 'General Support Inquiry';
+            const subject = interaction.fields.getTextInputValue('ticket_subject') || 'General ModMail Inquiry';
             const details = interaction.fields.getTextInputValue('ticket_details') || '';
             const robloxUser = interaction.fields.getTextInputValue('ticket_roblox') || '';
 
-            const { TICKET_CATEGORIES, buildTicketControlRow } = require('../commands/ticket');
-            const catConfig = TICKET_CATEGORIES[categoryKey] || TICKET_CATEGORIES.general;
-            const targetRoleId = config.roles[catConfig.roleKey] || config.roles.staff;
+            const { createModmailThread, MODMAIL_CATEGORIES } = require('./modmailHandler');
+            const catConfig = MODMAIL_CATEGORIES[categoryKey] || MODMAIL_CATEGORIES.general;
 
-            if (catConfig.staffOnly) {
-                const isStaff = interaction.member && (
-                    hasTicketOverride(interaction.member) || interaction.member.roles.cache.has(config.roles.staff) ||
-                    interaction.member.roles.cache.has(config.roles.mr) ||
-                    interaction.member.roles.cache.has(config.roles.hr) ||
-                    interaction.member.roles.cache.has(config.roles.trainee) ||
-                    interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)
-                );
-                if (!isStaff) {
-                    return interaction.editReply({
-                        content: '🚫 **Access Denied:** The `DATA-ENTRIES` category is strictly reserved for verified Grandway Shopping Staff members.'
-                    });
-                }
-            }
+            try {
+                const { staffChannel, ticketRecord } = await createModmailThread({
+                    guild: interaction.guild,
+                    user: interaction.user,
+                    member: interaction.member,
+                    categoryKey,
+                    subject: `${subject}${robloxUser ? ` (Roblox: ${robloxUser})` : ''}`,
+                    details,
+                    client: interaction.client
+                });
 
-            // Find dedicated ━━━ 🎫 SUPPORT TICKETS ━━━ category in the guild
-            const supportCategory = interaction.guild.channels.cache.find(c => 
-                c.type === ChannelType.GuildCategory && 
-                (c.name.includes('SUPPORT TICKETS') || c.id === config.channels.ticketsCategory || c.id === '1558519068951187498')
-            );
-            const parentCategoryId = supportCategory ? supportCategory.id : (config.channels.ticketsCategory || interaction.channel.parentId);
-
-            const permissionOverwrites = [
-                { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                { 
-                    id: interaction.user.id, 
-                    allow: [
-                        PermissionFlagsBits.ViewChannel, 
-                        PermissionFlagsBits.SendMessages, 
-                        PermissionFlagsBits.ReadMessageHistory,
-                        PermissionFlagsBits.AttachFiles,
-                        PermissionFlagsBits.EmbedLinks
-                    ] 
-                }
-            ];
-
-            if (catConfig.targetUserId) {
-                // Only this user can see it; explicitly deny other staff roles from seeing it
-                const rolesToDeny = [
-                    config.roles.staff,
-                    config.roles.mr,
-                    config.roles.hr,
-                    config.roles.trainee,
-                    config.roles.supportManagement,
-                    config.roles.supportGeneral,
-                    config.roles.supportReport,
-                    config.roles.supportTechnical,
-                    config.roles.supportAppeals
-                ].filter(Boolean);
-
-                for (const rId of rolesToDeny) {
-                    permissionOverwrites.push({
-                        id: rId,
-                        deny: [PermissionFlagsBits.ViewChannel]
-                    });
-                }
-
-                if (interaction.user.id !== catConfig.targetUserId) {
-                    permissionOverwrites.push({
-                        id: catConfig.targetUserId,
-                        allow: [
-                            PermissionFlagsBits.ViewChannel, 
-                            PermissionFlagsBits.SendMessages, 
-                            PermissionFlagsBits.ReadMessageHistory,
-                            PermissionFlagsBits.AttachFiles,
-                            PermissionFlagsBits.EmbedLinks,
-                            PermissionFlagsBits.ManageMessages
-                        ]
-                    });
-                }
-            } else {
-                permissionOverwrites.push({
-                    id: targetRoleId, 
-                    allow: [
-                        PermissionFlagsBits.ViewChannel, 
-                        PermissionFlagsBits.SendMessages, 
-                        PermissionFlagsBits.ReadMessageHistory,
-                        PermissionFlagsBits.ManageMessages
-                    ] 
+                return interaction.editReply({
+                    content: `📬 **ModMail Thread Established!**\n\n` +
+                             `Please open your **Direct Messages (DMs)** with <@${interaction.client.user.id}> to chat with our staff team.\n` +
+                             `Your inquiry and details have been forwarded to the **${catConfig.label}** team.\n\n` +
+                             `• **Mailbox:** ${catConfig.emoji} ${catConfig.label}\n` +
+                             `• **Thread ID:** \`#${ticketRecord.id}\``
+                });
+            } catch (err) {
+                return interaction.editReply({
+                    content: `⚠️ **Could not open ModMail thread:** ${err.message}`
                 });
             }
-
-            const ticketChannel = await interaction.guild.channels.create({
-                name: `${categoryKey}-${interaction.user.username.toLowerCase()}`.slice(0, 32),
-                type: ChannelType.GuildText,
-                parent: parentCategoryId,
-                permissionOverwrites: withTicketOverride(permissionOverwrites)
-            });
-
-            const { fetchRobloxUserProfile } = require('../utils/robloxLookup');
-            let robloxProfile = null;
-            if (robloxUser) {
-                robloxProfile = await fetchRobloxUserProfile(robloxUser);
-            }
-
-            const ticketRecord = await db.createTicketRecord({
-                channelId: ticketChannel.id,
-                userId: interaction.user.id,
-                userTag: interaction.user.tag,
-                type: categoryKey,
-                subject,
-                details,
-                robloxUsername: robloxProfile ? robloxProfile.username : (robloxUser || ''),
-                aiDisabled: Boolean(catConfig.aiDisabled)
-            });
-
-            // Calculate Live Queue Position
-            const allTickets = db.getData().tickets || [];
-            const queuePosition = allTickets.filter(t => (t.status === 'OPEN' || t.status === 'ESCALATED') && t.type === categoryKey).length + 1;
-
-            // Check Operating Hours Window
-            const ticketSettings = await db.getTicketSettings();
-            const currentUtcHour = new Date().getUTCHours();
-            const opHours = ticketSettings.operating_hours || { enabled: false, start_utc: 8, end_utc: 23 };
-            const isOutsideHours = Boolean(opHours.enabled && (currentUtcHour < opHours.start_utc || currentUtcHour >= opHours.end_utc));
-            // Feature #5: Priority VIP / Colleague Lane (Fast Track)
-            const openerMember = interaction.member;
-            const isVipOrStaff = openerMember && (
-                hasTicketOverride(openerMember) || openerMember.roles.cache.has(config.roles.staff) ||
-                openerMember.roles.cache.has(config.roles.mr) ||
-                openerMember.roles.cache.has(config.roles.hr) ||
-                openerMember.premiumSince !== null || // Server Booster
-                openerMember.permissions.has(PermissionFlagsBits.ManageGuild)
-            );
-
-            if (isVipOrStaff) {
-                ticketRecord.priority = 'HIGH';
-                ticketRecord.is_vip = true;
-                db.save();
-            }
-
-            const staffMention = catConfig.targetUserId ? `<@${catConfig.targetUserId}>` : `<@&${targetRoleId}>`;
-
-            const welcomeEmbed = new EmbedBuilder()
-                .setTitle(`🎫 Ticket #${ticketRecord.id} — ${catConfig.label}`)
-                .setDescription(
-                    catConfig.aiDisabled
-                        ? `Hello <@${interaction.user.id}>! You have opened a **DATA-ENTRIES** ticket.\n\n🚫 **AI Support is DISABLED** for this room. You are speaking directly with ${staffMention}.\n\nPlease provide your data entries, roster updates, or internal records below.`
-                        : `Hello <@${interaction.user.id}>! Welcome to your private support channel.\n\n` +
-                        (isVipOrStaff ? `⭐ **VIP / Staff Fast-Track:** *Your ticket has been fast-tracked to High Priority for accelerated management review.*\n\n` : '') +
-                        `⚠️ **AI Beta Notice:** *Our automated AI assistant is currently in beta. It may occasionally get things wrong. All tickets opened will help train and refine our AI model to better serve Grandway Shopping customers!*\n\n` +
-                        `🤖 **AI Assistant:** The AI is analyzing your issue. If standard store guidance applies, an instant solution will be posted. Otherwise, this ticket is prioritized and dispatched directly to ${staffMention}.`
-                )
-                .addFields(
-                    { name: '📋 Category', value: `${catConfig.emoji} ${catConfig.label}`, inline: true },
-                    { name: '👤 Creator', value: `<@${interaction.user.id}> ${isVipOrStaff ? '⭐ `VIP/Staff`' : ''}`, inline: true },
-                    { name: catConfig.targetUserId ? '🛡️ Assigned Staff' : '🛡️ Department', value: staffMention, inline: true },
-                    { name: '🔢 Queue Position', value: isVipOrStaff ? '`⚡ Priority Fast-Track Lane`' : `\`#${queuePosition} in line for ${catConfig.label}\``, inline: true },
-                    { name: '📝 Subject', value: subject, inline: true },
-                    { name: '💬 Details', value: details ? details.slice(0, 1024) : '*None provided*', inline: false }
-                )
-                .setColor(catConfig.color)
-                .setTimestamp()
-                .setFooter({ text: catConfig.aiDisabled ? 'Grandway Shopping Data Room • Human Staff Only' : 'Grandway Shopping Ticket Suite • AI in Beta', iconURL: interaction.guild.iconURL() });
-
-            if (isOutsideHours && !catConfig.aiDisabled) {
-                welcomeEmbed.addFields({
-                    name: '🌙 Department Off-Hours Notice',
-                    value: `Human staff business hours are **${opHours.start_utc}:00 UTC – ${opHours.end_utc}:00 UTC**. Our AI assistant is active 24/7, and colleagues will follow up as soon as they report on duty!`,
-                    inline: false
-                });
-            }
-
-            if (robloxProfile) {
-                welcomeEmbed.setThumbnail(robloxProfile.headshotUrl || null);
-                welcomeEmbed.addFields(
-                    { 
-                        name: '🎮 Roblox Player Profile', 
-                        value: `[**${robloxProfile.displayName}** (@${robloxProfile.username})](${robloxProfile.profileUrl})\n` +
-                               `• **Group Rank:** \`${robloxProfile.groupRank}\`\n` +
-                               `• **Roblox ID:** \`${robloxProfile.id}\`\n` +
-                               `• **Created:** ${robloxProfile.createdAt ? `<t:${Math.floor(new Date(robloxProfile.createdAt).getTime() / 1000)}:D>` : '*N/A*'}`,
-                        inline: false 
-                    }
-                );
-            } else if (robloxUser) {
-                welcomeEmbed.addFields({ name: '🎮 Roblox Username', value: `\`${robloxUser}\` *(Profile lookup pending)*`, inline: false });
-            }
-
-            // If report category, instruct user with the required format and proof rule
-            if (categoryKey === 'report') {
-                const reportGuideEmbed = new EmbedBuilder()
-                    .setTitle('🚨 Player / Staff Report — Evidence & Format Required')
-                    .setDescription(
-                        `Before our <@&${targetRoleId}> department can investigate, you **MUST** provide valid proof and fill out the format below.\n\n` +
-                        `📸 **Strict Proof Policy:** Reports **without valid screenshot or video proof** cannot be actioned!\n\n` +
-                        `**Please copy and reply with this format:**\n` +
-                        `\`\`\`\n` +
-                        `• Offender Username(s): \n` +
-                        `• Offense / Violation: \n` +
-                        `• Approximate Date & Time: \n` +
-                        `• What Happened: \n` +
-                        `• Proof / Screenshots Attached: \n` +
-                        `\`\`\`\n` +
-                        `👉 *Upload your unedited screenshot(s) or video link directly into this chat.* Our AI Vision will process it and notify the investigation team.`
-                    )
-                    .setColor(config.colors.danger);
-
-                await ticketChannel.send({
-                    content: `<@${interaction.user.id}>`,
-                    embeds: [welcomeEmbed, reportGuideEmbed],
-                    components: [buildTicketControlRow()]
-                });
-            } else {
-                await ticketChannel.send({
-                    content: catConfig.targetUserId ? `<@${catConfig.targetUserId}>` : `<@${interaction.user.id}> <@&${targetRoleId}>`,
-                    embeds: [welcomeEmbed],
-                    components: [buildTicketControlRow()]
-                });
-            }
-
-            // Trigger AI Triage & Attempt to handle (bypassed if AI is disabled for this category)
-            if (ticketRecord.ai_disabled || !db.isAiEnabled()) {
-                return;
-            }
-
-            const { handleTicketWithAI } = require('../utils/ticketAi');
-            setTimeout(async () => {
-                try {
-                    const aiResult = await handleTicketWithAI(ticketRecord, `${subject}\n${details}`, interaction.user.username);
-                    ticketRecord.ai_attempted = true;
-
-                    // Update ticket priority & sentiment if assessed
-                    if (aiResult.urgency) {
-                        ticketRecord.priority = aiResult.urgency;
-                    }
-                    if (aiResult.sentiment) {
-                        ticketRecord.sentiment = aiResult.sentiment;
-                    }
-
-                    // 1. AI Auto-Categorization & Auto-Reroute
-                    let rerouted = false;
-                    if (aiResult.suggested_category && aiResult.suggested_category !== ticketRecord.type && TICKET_CATEGORIES[aiResult.suggested_category]) {
-                        const newCatKey = aiResult.suggested_category;
-                        const newCat = TICKET_CATEGORIES[newCatKey];
-                        const newRoleId = config.roles[newCat.roleKey] || config.roles.staff;
-
-                        ticketRecord.type = newCatKey;
-                        targetRoleId = newRoleId;
-                        catConfig = newCat;
-                        rerouted = true;
-                        db.save();
-
-                        // Adjust channel permissions for the new role
-                        await ticketChannel.permissionOverwrites.edit(newRoleId, {
-                            ViewChannel: true,
-                            SendMessages: true,
-                            ReadMessageHistory: true,
-                            ManageMessages: true
-                        });
-
-                        const rerouteEmbed = new EmbedBuilder()
-                            .setTitle('🔀 AI Auto-Categorization & Reroute Notice')
-                            .setDescription(
-                                `The AI detected that this ticket belongs in **${newCat.label}** rather than **${catConfig.label}**.\n` +
-                                `• **New Category:** ${newCat.emoji} ${newCat.label}\n` +
-                                `• **Reassigned Department:** <@&${newRoleId}>\n` +
-                                `Department staff have been notified!`
-                            )
-                            .setColor(newCat.color)
-                            .setTimestamp();
-
-                        await ticketChannel.send({ embeds: [rerouteEmbed] });
-                    }
-
-                    // 2. Automated Toxic / Profanity Scanner Alert
-                    if (aiResult.is_toxic) {
-                        ticketRecord.flagged_toxic = true;
-                        const toxicAlertEmbed = new EmbedBuilder()
-                            .setTitle('⚠️ Automated Toxic / Profanity Detection Warning')
-                            .setDescription(`Customer message was flagged for hostile or inappropriate language.\n\n**Warning:** Grandway Shopping maintains a zero-tolerance policy for harassment and abusive conduct. Continued toxicity may lead to a ticket blacklist or server timeout.\n\n*Notice for Staff:* High-priority de-escalation advised.`)
-                            .setColor(config.colors.danger)
-                            .setTimestamp();
-                        await ticketChannel.send({ embeds: [toxicAlertEmbed] });
-                    }
-
-                    // 3. AI Translation on the Fly
-                    if (aiResult.detected_language && aiResult.detected_language.toLowerCase() !== 'english') {
-                        ticketRecord.detected_language = aiResult.detected_language;
-                        const translationEmbed = new EmbedBuilder()
-                            .setTitle(`🌐 AI Translation on the Fly (${aiResult.detected_language} ➔ English)`)
-                            .setDescription(
-                                `**Detected Language:** \`${aiResult.detected_language}\`\n\n` +
-                                `**English Staff Translation:**\n> ${aiResult.english_translation || subject + ' - ' + details}\n\n` +
-                                `*Note: AI responses to customer will automatically be provided in their native language!*`
-                            )
-                            .setColor(config.colors.secondary)
-                            .setFooter({ text: 'Grandway Shopping Multi-Language Support Engine' });
-                        await ticketChannel.send({ embeds: [translationEmbed] });
-                    }
-
-                    // 4. AI Bug Deduplication & Auto-Filing
-                    if (aiResult.is_known_bug) {
-                        const duplicateEmbed = new EmbedBuilder()
-                            .setTitle('🐛 Known Bug Detected — Patch in Progress')
-                            .setDescription(
-                                `Our AI detected this issue matches a known report: **${aiResult.matched_bug_title || 'Known Glitch'}**.\n\n` +
-                                `Grandway Shopping development is already actively working on a fix for this bug in the supermarket! You do not need to take any further action.`
-                            )
-                            .setColor(config.colors.warning)
-                            .setFooter({ text: 'Grandway Shopping Bug Deduplication System' });
-                        await ticketChannel.send({ embeds: [duplicateEmbed] });
-                    } else if (aiResult.is_new_bug && aiResult.bug_title) {
-                        // Automatically file new verified bug in bugs table and dispatch to #bug-reports
-                        try {
-                            const resBug = await db.run(
-                                `INSERT INTO bugs (user_id, title, details, steps, status) VALUES (?, ?, ?, ?, 'PENDING')`,
-                                [interaction.user.id, aiResult.bug_title, details || subject, aiResult.bug_steps || 'Reported via Support Ticket', 'PENDING']
-                            );
-                            const bugsChannel = interaction.guild.channels.cache.get(config.channels.bugsReport);
-                            if (bugsChannel) {
-                                const newBugEmbed = new EmbedBuilder()
-                                    .setTitle(`🐛 Bug Report #${resBug.lastID} — ${aiResult.bug_title}`)
-                                    .setDescription(details || subject)
-                                    .addFields(
-                                        { name: '👤 Reporter', value: `<@${interaction.user.id}>`, inline: true },
-                                        { name: '📌 Source', value: `Ticket #${ticketRecord.id}`, inline: true },
-                                        { name: '🔄 Steps / Notes', value: aiResult.bug_steps || 'See ticket details', inline: false }
-                                    )
-                                    .setColor(config.colors.warning)
-                                    .setTimestamp();
-                                const bugMsg = await bugsChannel.send({ embeds: [newBugEmbed] });
-                                await db.run(`UPDATE bugs SET message_id = ? WHERE id = ?`, [bugMsg.id, resBug.lastID]);
-                            }
-
-                            await ticketChannel.send({
-                                embeds: [
-                                    new EmbedBuilder()
-                                        .setTitle('🐛 Bug Report Automatically Filed')
-                                        .setDescription(`This bug has been logged as **#${resBug.lastID}** in <#${config.channels.bugsReport}> for developer investigation!`)
-                                        .setColor(config.colors.primary)
-                                ]
-                            });
-                        } catch (bErr) {
-                            console.error('[AUTO BUG REPORT ERROR]', bErr);
-                        }
-                    }
-
-                    // Guard: Never auto-resolve or close applications for Developer, Staff, or Leadership
-                    const appKeywords = /(developer|dev|apply|application|hiring|scripter|builder|ui designer|modeler|staff role|mod role)/i;
-                    const isApplicationQuery = appKeywords.test(subject || '') || appKeywords.test(details || '');
-                    if (isApplicationQuery) {
-                        aiResult.can_handle = false;
-                        aiResult.escalation_reason = 'Staff / Developer Application received. Human leadership review required.';
-                        if (!aiResult.resolution_message || aiResult.resolution_message.includes('join our official Discord server') || aiResult.resolution_message.includes('#staff-applications')) {
-                            aiResult.resolution_message = 
-                                `Hello! 👋 Thank you for your interest in joining the Grandway Shopping team!\n\n` +
-                                `Our leadership reviews all Developer & Staff applications directly inside support tickets.\n` +
-                                `Please leave your ticket open and reply with:\n` +
-                                `1. **Roblox Username:**\n` +
-                                `2. **Role Applying For:** (e.g. Scripter, Builder, UI, 3D Modeler, Staff)\n` +
-                                `3. **Portfolio / Past Experience:** (Links or screenshots of past work)\n` +
-                                `4. **Why Grandway Shopping:**\n\n` +
-                                `Our management team will review your application here shortly!`;
-                        }
-                    }
-
-                    if (aiResult.can_handle) {
-                        ticketRecord.ai_handled = true;
-                        db.save();
-
-                        // Add to AI training memory
-                        await db.addAiTrainingExample({
-                            ticketId: ticketRecord.id,
-                            category: ticketRecord.type,
-                            userQuery: `${subject} - ${details}`,
-                            resolution: aiResult.resolution_message,
-                            resolvedBy: 'AI_BOT',
-                            wasAiHandled: true
-                        });
-
-                        const aiAssistantEmbed = new EmbedBuilder()
-                            .setTitle('🤖 Grandway Shopping AI Assistant')
-                            .setDescription(aiResult.resolution_message)
-                            .addFields(
-                                { name: '📊 Urgency & Sentiment', value: `Urgency: \`${ticketRecord.priority}\` • Sentiment: \`${ticketRecord.sentiment || 'neutral'}\``, inline: true },
-                                { name: '💬 Need Human Staff?', value: 'If this answered your question, you can close the ticket below. Otherwise, human colleagues have also been notified and will assist you here!', inline: false }
-                            )
-                            .setColor(config.colors.primary)
-                            .setFooter({ text: 'Grandway Shopping AI Customer Support' });
-
-                        await ticketChannel.send({ embeds: [aiAssistantEmbed] });
-                    } else {
-                        // AI could not handle -> Escalate to human department
-                        ticketRecord.ai_escalated = true;
-                        ticketRecord.status = 'ESCALATED';
-                        db.save();
-
-                        const escalationEmbed = new EmbedBuilder()
-                            .setTitle('🛡️ Escalated to Human Support Department')
-                            .setDescription(
-                                aiResult.resolution_message + `\n\n` +
-                                `🔔 **Department Alert:** <@&${targetRoleId}> staff have been notified and will take over this ticket.\n` +
-                                `*Reason:* ${aiResult.escalation_reason || 'Human staff action required.'}`
-                            )
-                            .addFields(
-                                { name: '⚡ Priority / Urgency', value: `\`${ticketRecord.priority}\``, inline: true },
-                                { name: '💬 Customer Sentiment', value: `\`${ticketRecord.sentiment || 'neutral'}\``, inline: true }
-                            )
-                            .setColor(ticketRecord.priority === 'URGENT' || ticketRecord.priority === 'HIGH' ? config.colors.danger : config.colors.warning)
-                            .setTimestamp();
-
-                        await ticketChannel.send({
-                            content: `<@&${targetRoleId}> 🚨 **HUMAN SUPPORT ESCALATION REQUIRED**`,
-                            embeds: [escalationEmbed]
-                        });
-                    }
-                } catch (aiErr) {
-                    console.error('[AI TRIAGE RUNTIME ERROR]', aiErr);
-                }
-            }, 1500);
-
-            return interaction.editReply({
-                content: `✅ Ticket **#${ticketRecord.id}** created! Head over to <#${ticketChannel.id}>.`
-            });
         }
 
         // Modal for Survey Feedback Submission (Rating + Comments)
@@ -2255,13 +2019,14 @@ async function handleInteraction(interaction) {
     }
 
     // 3. SELECT MENU (TICKETS INTAKE MODAL TRIGGER)
+    // 3. SELECT MENU (MODMAIL INTAKE MODAL TRIGGER)
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_type') {
         const type = interaction.values[0];
 
-        // Check if category is staff-only (e.g. data_entries)
-        const { TICKET_CATEGORIES, buildTicketControlRow } = require('../commands/ticket');
-        const selectedCat = TICKET_CATEGORIES[type];
-        if (selectedCat && selectedCat.staffOnly) {
+        const { MODMAIL_CATEGORIES } = require('./modmailHandler');
+        const selectedCat = MODMAIL_CATEGORIES[type] || MODMAIL_CATEGORIES.general;
+
+        if (selectedCat.staffOnly) {
             const isStaff = interaction.member && (
                 hasTicketOverride(interaction.member) || interaction.member.roles.cache.has(config.roles.staff) ||
                 interaction.member.roles.cache.has(config.roles.mr) ||
@@ -2277,166 +2042,56 @@ async function handleInteraction(interaction) {
             }
         }
 
-        // Check if ticket system is temporarily disabled/paused
         const ticketSettings = await db.getTicketSettings();
         if (!ticketSettings.enabled) {
             return interaction.reply({
-                content: `⚠️ **Ticket Support Paused:** ${ticketSettings.disabled_reason || 'Support tickets are temporarily closed for scheduled maintenance.'}`,
+                content: `⚠️ **ModMail Support Paused:** ${ticketSettings.disabled_reason || 'Support is temporarily closed for scheduled maintenance.'}`,
                 flags: MessageFlags.Ephemeral
             });
         }
 
-        // Check if user is ticket blacklisted
         const isBanned = await db.isTicketBlacklisted(interaction.user.id);
         if (isBanned) {
             const expText = isBanned.expires_at ? `<t:${Math.floor(new Date(isBanned.expires_at).getTime() / 1000)}:R>` : 'Never (Permanent)';
             return interaction.reply({
-                content: `🚫 **Ticket Access Restricted:** You are blacklisted from opening Grandway Shopping tickets.\n• **Reason:** ${isBanned.reason}\n• **Expires:** ${expText}`,
+                content: `🚫 **ModMail Access Restricted:** You are blacklisted from opening Grandway Shopping ModMail.\n• **Reason:** ${isBanned.reason}\n• **Expires:** ${expText}`,
                 flags: MessageFlags.Ephemeral
             });
         }
 
-        // Check active ticket
-        const activeTicket = await db.getActiveUserTicket(interaction.user.id, type);
+        const activeTicket = await db.getActiveUserTicket(interaction.user.id);
         if (activeTicket) {
             return interaction.reply({
-                content: `⚠️ You already have an active ticket open: <#${activeTicket.channel_id}>. Please finish or close that ticket first!`,
+                content: `⚠️ You already have an active ModMail thread: <#${activeTicket.channel_id}>. Please finish or close that thread first!`,
                 flags: MessageFlags.Ephemeral
             });
         }
 
-        // If DATA-ENTRIES, create ticket immediately without requiring a modal form
-        if (type === 'data_entries') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const catConfig = selectedCat;
-            const categoryKey = type;
-            const subject = 'Staff Data Entry Submission';
-            const details = 'Staff roster credentials and data intake';
-
-            const supportCategory = interaction.guild.channels.cache.find(c => 
-                c.type === ChannelType.GuildCategory && 
-                (c.name.includes('SUPPORT TICKETS') || c.id === config.channels.ticketsCategory || c.id === '1558519068951187498')
-            );
-            const parentCategoryId = supportCategory ? supportCategory.id : (config.channels.ticketsCategory || interaction.channel.parentId);
-
-            const permissionOverwrites = [
-                { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                { 
-                    id: interaction.user.id, 
-                    allow: [
-                        PermissionFlagsBits.ViewChannel, 
-                        PermissionFlagsBits.SendMessages, 
-                        PermissionFlagsBits.ReadMessageHistory,
-                        PermissionFlagsBits.AttachFiles,
-                        PermissionFlagsBits.EmbedLinks
-                    ] 
-                }
-            ];
-
-            const rolesToDeny = [
-                config.roles.staff,
-                config.roles.mr,
-                config.roles.hr,
-                config.roles.trainee,
-                config.roles.supportManagement,
-                config.roles.supportGeneral,
-                config.roles.supportReport,
-                config.roles.supportTechnical,
-                config.roles.supportAppeals
-            ].filter(Boolean);
-
-            for (const rId of rolesToDeny) {
-                permissionOverwrites.push({
-                    id: rId,
-                    deny: [PermissionFlagsBits.ViewChannel]
-                });
-            }
-
-            if (interaction.user.id !== catConfig.targetUserId) {
-                permissionOverwrites.push({
-                    id: catConfig.targetUserId,
-                    allow: [
-                        PermissionFlagsBits.ViewChannel, 
-                        PermissionFlagsBits.SendMessages, 
-                        PermissionFlagsBits.ReadMessageHistory,
-                        PermissionFlagsBits.AttachFiles,
-                        PermissionFlagsBits.EmbedLinks,
-                        PermissionFlagsBits.ManageMessages
-                    ]
-                });
-            }
-
-            const ticketChannel = await interaction.guild.channels.create({
-                name: `${categoryKey}-${interaction.user.username.toLowerCase()}`.slice(0, 32),
-                type: ChannelType.GuildText,
-                parent: parentCategoryId,
-                permissionOverwrites: withTicketOverride(permissionOverwrites)
-            });
-
-            const ticketRecord = await db.createTicketRecord({
-                channelId: ticketChannel.id,
-                userId: interaction.user.id,
-                userTag: interaction.user.tag,
-                type: categoryKey,
-                subject,
-                details,
-                robloxUsername: '',
-                aiDisabled: true
-            });
-
-            const staffMention = catConfig.targetUserId ? `<@${catConfig.targetUserId}>` : `<@&${config.roles.staff}>`;
-
-            const welcomeEmbed = new EmbedBuilder()
-                .setTitle(`🎫 Ticket #${ticketRecord.id} — ${catConfig.label}`)
-                .setDescription(
-                    `Hello <@${interaction.user.id}>! You have opened a **DATA-ENTRIES** ticket.\n\n` +
-                    `🚫 **AI Support is DISABLED** for this room. You are speaking directly with ${staffMention}.\n\n` +
-                    `Please paste your filled-out data entry template directly into this chat.`
-                )
-                .addFields(
-                    { name: '📋 Category', value: `${catConfig.emoji} ${catConfig.label}`, inline: true },
-                    { name: '👤 Creator', value: `<@${interaction.user.id}>`, inline: true },
-                    { name: '🛡️ Assigned Staff', value: staffMention, inline: true }
-                )
-                .setColor(catConfig.color)
-                .setTimestamp()
-                .setFooter({ text: 'Grandway Shopping Data Room • Human Staff Only', iconURL: interaction.guild.iconURL() });
-
-            await ticketChannel.send({
-                content: `<@${catConfig.targetUserId}>`,
-                embeds: [welcomeEmbed],
-                components: [buildTicketControlRow()]
-            });
-
-            return interaction.editReply({
-                content: `✅ Your private **DATA-ENTRIES** room has been created! Head over to <#${ticketChannel.id}>.`
-            });
-        }
-
+        // Intake Modal
         const modal = new ModalBuilder()
             .setCustomId(`modal_create_ticket_${type}`)
-            .setTitle(`Open Support Ticket`);
+            .setTitle(`Open ModMail: ${selectedCat.label.slice(0, 30)}`);
 
         const subjectInput = new TextInputBuilder()
             .setCustomId('ticket_subject')
-            .setLabel('Subject / Main Topic')
+            .setLabel('Subject / Inquiry Topic')
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('e.g. Question about checkout, reporting a glitch...')
+            .setPlaceholder('Briefly state what you need assistance with...')
             .setRequired(true);
 
         const detailsInput = new TextInputBuilder()
             .setCustomId('ticket_details')
-            .setLabel('Detailed Explanation')
+            .setLabel('Inquiry Details')
             .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('Describe your question or issue in detail...')
+            .setPlaceholder('Explain your situation in detail. Our staff will receive this in your thread...')
             .setRequired(true);
 
         const robloxInput = new TextInputBuilder()
             .setCustomId('ticket_roblox')
-            .setLabel('Roblox Username (Required)')
+            .setLabel('Roblox Username (Optional)')
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Enter your exact Roblox username...')
-            .setRequired(true);
+            .setPlaceholder('Your Roblox username if applicable...')
+            .setRequired(false);
 
         modal.addComponents(
             new ActionRowBuilder().addComponents(subjectInput),

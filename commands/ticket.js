@@ -259,7 +259,7 @@ async function buildTicketPanelEmbed(guild) {
     }
 
     const embed = new EmbedBuilder()
-        .setTitle('🎫 Grandway Shopping — Customer & Staff Support Center')
+        .setTitle('📬 Grandway Shopping — Official ModMail Support Hub')
         .setDescription(
             `Welcome to the **Grandway Shopping Support System**!\n` +
             `Our automated AI Assistant and dedicated department staff are here to help.\n\n` +
@@ -296,7 +296,7 @@ function buildTicketPanelSelectMenu() {
     return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
             .setCustomId('select_ticket_type')
-            .setPlaceholder('Select a Support Category to Open a Ticket...')
+            .setPlaceholder('📬 Select a ModMail Category to Open a Thread...')
             .addOptions(
                 Object.entries(TICKET_CATEGORIES).map(([key, cat]) => ({
                     label: cat.label,
@@ -324,17 +324,281 @@ function buildTransferSelectMenu() {
     );
 }
 
-function buildTicketControlRow() {
+function buildTicketControlRow(anonMode = true) {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('btn_ticket_claim').setLabel('✋ Claim Ticket').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('btn_ticket_claim').setLabel('✋ Claim Thread').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('btn_modmail_anon_reply').setLabel('🕵️ Anon Reply').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('btn_modmail_toggle_anon').setLabel(anonMode ? '🎭 Anon Mode: ON' : '🎭 Anon Mode: OFF').setStyle(anonMode ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('btn_ticket_transfer_menu').setLabel('🔀 Transfer').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('btn_ticket_snippets').setLabel('⚡ Quick Tags').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('btn_ticket_close_prompt').setLabel('🔒 Close ModMail').setStyle(ButtonStyle.Danger)
+    );
+}
+
+function buildTicketControlRow2() {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('btn_ticket_snippets').setLabel('⚡ Quick Tags').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('btn_ticket_ai_summary').setLabel('📝 AI Summary').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('btn_ticket_close_prompt').setLabel('🔒 Close Ticket').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('btn_ticket_transcript').setLabel('📄 Transcript').setStyle(ButtonStyle.Secondary)
     );
 }
 
 module.exports = [
+    {
+        data: new SlashCommandBuilder()
+            .setName('modmail-panel')
+            .setDescription('Deploy the interactive multi-category ModMail Support Panel in this channel')
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        async execute(interaction) {
+            const member = interaction.member;
+            const isAuthorized = member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+                                 member.roles.cache.has(config.roles.hr) ||
+                                 member.roles.cache.has(config.roles.mr) ||
+                                 (config.ignoredUserIds || []).includes(interaction.user.id);
+
+            if (!isAuthorized) {
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff Management can deploy the ModMail panel.', flags: MessageFlags.Ephemeral });
+            }
+
+            const embed = await buildTicketPanelEmbed(interaction.guild);
+            const menu = buildTicketPanelSelectMenu();
+
+            const panelMsg = await interaction.channel.send({ embeds: [embed], components: [menu] });
+            const db = getDb();
+            await db.updateTicketSettings({
+                panel_channel_id: interaction.channel.id,
+                panel_message_id: panelMsg.id
+            });
+            return interaction.reply({ content: '✅ Interactive ModMail Support Panel deployed successfully in this channel!', flags: MessageFlags.Ephemeral });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('modmail-reply')
+            .setDescription('Send a staff reply to the customer in this ModMail thread')
+            .addStringOption(opt => opt.setName('message').setDescription('Message content to send').setRequired(true))
+            .addBooleanOption(opt => opt.setName('anonymous').setDescription('Send anonymously concealing your staff identity (Default: True)').setRequired(false)),
+        async execute(interaction) {
+            const member = interaction.member;
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
+                            member.roles.cache.has(config.roles.mr) ||
+                            member.roles.cache.has(config.roles.hr) ||
+                            member.permissions.has(PermissionFlagsBits.ManageMessages);
+
+            if (!isStaff) {
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can send ModMail replies.', flags: MessageFlags.Ephemeral });
+            }
+
+            const db = getDb();
+            const ticket = await db.getTicketByChannel(interaction.channel.id);
+            if (!ticket || ticket.status === 'CLOSED') {
+                return interaction.reply({ content: '❌ This command can only be used inside an active ModMail channel.', flags: MessageFlags.Ephemeral });
+            }
+
+            let targetUser = null;
+            try {
+                targetUser = await interaction.client.users.fetch(ticket.user_id);
+            } catch (_) {
+                return interaction.reply({ content: '❌ Could not fetch user associated with this thread.', flags: MessageFlags.Ephemeral });
+            }
+
+            const replyText = interaction.options.getString('message');
+            const isAnon = interaction.options.getBoolean('anonymous') !== false;
+
+            const dmEmbed = new EmbedBuilder()
+                .setAuthor({ 
+                    name: isAnon ? 'Grandway Shopping ModMail Team 🛡️' : `${interaction.user.username} (Staff Colleague)`, 
+                    iconURL: isAnon ? (interaction.guild.iconURL({ dynamic: true }) || undefined) : interaction.user.displayAvatarURL({ dynamic: true })
+                })
+                .setDescription(replyText)
+                .setColor(config.colors.secondary)
+                .setFooter({ text: isAnon ? 'Official ModMail Response • Support Staff ID Protected' : 'Grandway Shopping Staff Response' })
+                .setTimestamp();
+
+            try {
+                await targetUser.send({ embeds: [dmEmbed] });
+            } catch (err) {
+                return interaction.reply({ content: `⚠️ **Delivery Failed:** <@${ticket.user_id}> has DMs closed or blocked.`, flags: MessageFlags.Ephemeral });
+            }
+
+            const receiptEmbed = new EmbedBuilder()
+                .setAuthor({
+                    name: `${interaction.user.username} (${isAnon ? 'Anonymous to Customer' : 'Signed'})`,
+                    iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                })
+                .setDescription(replyText)
+                .setColor(isAnon ? config.colors.secondary : config.colors.primary)
+                .setFooter({ text: `Relayed to customer DM • ${isAnon ? 'Staff identity hidden in DM' : 'Staff name shown in DM'}` })
+                .setTimestamp();
+
+            await interaction.channel.send({ embeds: [receiptEmbed] });
+
+            await db.addTicketNote(interaction.channel.id, interaction.user.id, `[MODMAIL REPLY ${isAnon ? '(ANONYMOUS)' : '(SIGNED)'}]: ${replyText}`);
+
+            await db.updateTicket(interaction.channel.id, {
+                first_response_at: ticket.first_response_at || new Date().toISOString(),
+                last_staff_response_at: new Date().toISOString(),
+                awaiting_customer: true,
+                customer_warned_at: null
+            });
+
+            return interaction.reply({ content: `✅ ModMail response delivered ${isAnon ? 'anonymously' : 'signed'}.`, flags: MessageFlags.Ephemeral });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('modmail-anon')
+            .setDescription('Send an anonymous reply to this ModMail thread concealing your staff identity')
+            .addStringOption(opt => opt.setName('message').setDescription('Message to send as Grandway Shopping ModMail Team').setRequired(true)),
+        async execute(interaction) {
+            const member = interaction.member;
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
+                            member.roles.cache.has(config.roles.mr) ||
+                            member.roles.cache.has(config.roles.hr) ||
+                            member.permissions.has(PermissionFlagsBits.ManageMessages);
+
+            if (!isStaff) {
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can send anonymous ModMail replies.', flags: MessageFlags.Ephemeral });
+            }
+
+            const db = getDb();
+            const ticket = await db.getTicketByChannel(interaction.channel.id);
+            if (!ticket || ticket.status === 'CLOSED') {
+                return interaction.reply({ content: '❌ This command can only be used inside an active ModMail channel.', flags: MessageFlags.Ephemeral });
+            }
+
+            let targetUser = null;
+            try {
+                targetUser = await interaction.client.users.fetch(ticket.user_id);
+            } catch (_) {
+                return interaction.reply({ content: '❌ Could not fetch user associated with this thread.', flags: MessageFlags.Ephemeral });
+            }
+
+            const replyText = interaction.options.getString('message');
+
+            const dmEmbed = new EmbedBuilder()
+                .setAuthor({ 
+                    name: 'Grandway Shopping ModMail Team 🛡️', 
+                    iconURL: interaction.guild.iconURL({ dynamic: true }) || undefined 
+                })
+                .setDescription(replyText)
+                .setColor(config.colors.secondary)
+                .setFooter({ text: 'Official ModMail Response • Support Staff ID Protected' })
+                .setTimestamp();
+
+            try {
+                await targetUser.send({ embeds: [dmEmbed] });
+            } catch (err) {
+                return interaction.reply({ content: `⚠️ **Delivery Failed:** <@${ticket.user_id}> has DMs closed or blocked.`, flags: MessageFlags.Ephemeral });
+            }
+
+            const receiptEmbed = new EmbedBuilder()
+                .setAuthor({
+                    name: `${interaction.user.username} (Anonymous to Customer)`,
+                    iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                })
+                .setDescription(replyText)
+                .setColor(config.colors.secondary)
+                .setFooter({ text: 'Relayed to customer DM • Staff identity hidden in DM' })
+                .setTimestamp();
+
+            await interaction.channel.send({ embeds: [receiptEmbed] });
+
+            await db.addTicketNote(interaction.channel.id, interaction.user.id, `[ANON REPLY (${interaction.user.tag})]: ${replyText}`);
+
+            await db.updateTicket(interaction.channel.id, {
+                first_response_at: ticket.first_response_at || new Date().toISOString(),
+                last_staff_response_at: new Date().toISOString(),
+                awaiting_customer: true,
+                customer_warned_at: null
+            });
+
+            return interaction.reply({ content: '✅ Anonymous ModMail response dispatched.', flags: MessageFlags.Ephemeral });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('modmail-anon-mode')
+            .setDescription('Toggle persistent anonymous chat mode for this ModMail thread')
+            .addBooleanOption(opt => opt.setName('enabled').setDescription('Set anonymous mode ON (true) or OFF (false)').setRequired(false)),
+        async execute(interaction) {
+            const member = interaction.member;
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
+                            member.roles.cache.has(config.roles.mr) ||
+                            member.roles.cache.has(config.roles.hr) ||
+                            member.permissions.has(PermissionFlagsBits.ManageMessages);
+
+            if (!isStaff) {
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can toggle anonymous mode.', flags: MessageFlags.Ephemeral });
+            }
+
+            const db = getDb();
+            const ticket = await db.getTicketByChannel(interaction.channel.id);
+            if (!ticket || ticket.status === 'CLOSED') {
+                return interaction.reply({ content: '❌ This command can only be used inside an active ModMail channel.', flags: MessageFlags.Ephemeral });
+            }
+
+            const explicitVal = interaction.options.getBoolean('enabled');
+            if (explicitVal !== null) {
+                ticket.anon_mode = explicitVal;
+            } else {
+                ticket.anon_mode = !ticket.anon_mode;
+            }
+            db.save();
+
+            const statusText = ticket.anon_mode ? 'ENABLED 🟢' : 'DISABLED ⚪';
+            const embed = new EmbedBuilder()
+                .setTitle(`🎭 ModMail Anonymous Chat Mode: ${statusText}`)
+                .setDescription(
+                    ticket.anon_mode
+                        ? 'All staff messages typed in this channel will now be **automatically relayed to customer DMs anonymously** (staff identity protected).'
+                        : 'Staff messages typed in this channel will display staff usernames and avatars in customer DMs.'
+                )
+                .setColor(ticket.anon_mode ? config.colors.primary : config.colors.neutral)
+                .setFooter({ text: `Toggled by ${interaction.user.username}` })
+                .setTimestamp();
+
+            await interaction.channel.send({ embeds: [embed] });
+            return interaction.reply({ content: `✅ Anonymous Chat Mode is now **${statusText}** for this thread.`, flags: MessageFlags.Ephemeral });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('modmail-close')
+            .setDescription('Close this ModMail thread and dispatch an official transcript to customer DMs')
+            .addStringOption(opt => opt.setName('reason').setDescription('Reason for closing this ModMail thread').setRequired(false)),
+        async execute(interaction) {
+            const member = interaction.member;
+            const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
+                            member.roles.cache.has(config.roles.mr) ||
+                            member.roles.cache.has(config.roles.hr) ||
+                            member.permissions.has(PermissionFlagsBits.ManageMessages);
+
+            const db = getDb();
+            const ticket = await db.getTicketByChannel(interaction.channel.id);
+            if (!ticket || ticket.status === 'CLOSED') {
+                return interaction.reply({ content: '❌ This command can only be used inside an active ModMail channel.', flags: MessageFlags.Ephemeral });
+            }
+
+            if (!isStaff && ticket.user_id !== interaction.user.id) {
+                return interaction.reply({ content: '❌ Only the thread creator or support staff can close this ModMail thread.', flags: MessageFlags.Ephemeral });
+            }
+
+            await interaction.deferReply();
+            const reason = interaction.options.getString('reason') || 'Resolved by staff';
+
+            const { closeModmailThread } = require('../handlers/modmailHandler');
+            await closeModmailThread({
+                channel: interaction.channel,
+                ticket,
+                closedBy: interaction.user,
+                reason,
+                guild: interaction.guild,
+                client: interaction.client
+            });
+
+            return interaction.editReply({ content: '🔒 ModMail thread concluded and archived.' });
+        }
+    },
     {
         data: new SlashCommandBuilder()
             .setName('ticket-panel')
@@ -1798,6 +2062,7 @@ module.exports = [
 module.exports.TICKET_CATEGORIES = TICKET_CATEGORIES;
 module.exports.SUPPORT_TAGS = SUPPORT_TAGS;
 module.exports.buildTicketControlRow = buildTicketControlRow;
+module.exports.buildTicketControlRow2 = buildTicketControlRow2;
 module.exports.buildSnippetSelectMenu = buildSnippetSelectMenu;
 module.exports.buildTransferSelectMenu = buildTransferSelectMenu;
 module.exports.buildTicketPanelEmbed = buildTicketPanelEmbed;

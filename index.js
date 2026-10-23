@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, ActivityType, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, ActivityType, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -13,6 +13,7 @@ const { handleTicketChatMessage } = require('./handlers/ticketChatHandler');
 const { handleDataEntriesMessage } = require('./handlers/dataEntriesHandler');
 const { trackMessageForGhostPing, handleGhostPing } = require('./handlers/ghostPingHandler');
 const { handleLoaPing } = require('./handlers/loaPingHandler');
+const { handleIncomingModmailDm, handleStaffModmailMessage } = require('./handlers/modmailHandler');
 
 const client = new Client({
     intents: [

@@ -534,6 +534,7 @@ const db = {
             ai_handled: false,
             ai_escalated: false,
             ai_disabled: Boolean(aiDisabled),
+            anon_mode: false,
             internal_notes: [],
             feedback_rating: null,
             feedback_comment: null
@@ -541,6 +542,15 @@ const db = {
         dbData.tickets.push(ticket);
         saveDb();
         return ticket;
+    },
+
+    async toggleTicketAnonMode(channelOrId) {
+        loadDb();
+        const ticket = await this.getTicketByChannel(channelOrId);
+        if (!ticket) return false;
+        ticket.anon_mode = !ticket.anon_mode;
+        saveDb();
+        return ticket.anon_mode;
     },
 
     async getTicketByChannel(channelOrId) {
