@@ -59,7 +59,7 @@ module.exports = [
                 .setTitle('✅ Roblox Account Verified!')
                 .setDescription(`Successfully linked **${realUsername}** (ID: \`${robloxId}\`) to <@${interaction.user.id}>!`)
                 .addFields(
-                    { name: '🏬 FreshlyPlaza Group Rank', value: `**${rankName}** (Group ID: ${config.robloxGroupId})`, inline: true },
+                    { name: '🏬 Grandway Shopping Group Rank', value: `**${rankName}** (Group ID: ${config.robloxGroupId})`, inline: true },
                     { name: '🏷️ Assigned Role', value: `<@&${config.roles.verified}>`, inline: true }
                 )
                 .setColor(config.colors.primary)

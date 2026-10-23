@@ -44,7 +44,7 @@ async function handleLoaPing(message) {
             )
             .addFields({ name: '📋 Total LOA Ping Warnings', value: `${totalWarnings}`, inline: true })
             .setColor(config.colors.warning)
-            .setFooter({ text: 'FreshlyPlaza LOA Protection' })
+            .setFooter({ text: 'Grandway Shopping LOA Protection' })
             .setTimestamp();
 
         await message.reply({

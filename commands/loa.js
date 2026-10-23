@@ -23,7 +23,7 @@ async function broadcastLoaApproval(client, guild, loa, actionedByUserId) {
                 { name: '🛡️ Authorized By', value: `<@${actionedByUserId}>`, inline: true }
             )
             .setColor(config.colors.secondary)
-            .setFooter({ text: 'FreshlyPlaza HR Portal • Leave Management', iconURL: guild.iconURL() })
+            .setFooter({ text: 'Grandway Shopping HR Portal • Leave Management', iconURL: guild.iconURL() })
             .setTimestamp();
 
         try {
@@ -41,7 +41,7 @@ async function broadcastLoaApproval(client, guild, loa, actionedByUserId) {
         const user = await client.users.fetch(loa.user_id);
         if (user) {
             await user.send({
-                content: `🌴 **Your FreshlyPlaza LOA Request #${loa.id} has been APPROVED!**\n\n• **Duration:** ${loa.start_date} to ${loa.end_date}\n• **Approved By:** <@${actionedByUserId}>\n\nYour LOA role has been applied. You are protected from shift activity checks while on leave. Please return promptly on ${loa.end_date}.`
+                content: `🌴 **Your Grandway Shopping LOA Request #${loa.id} has been APPROVED!**\n\n• **Duration:** ${loa.start_date} to ${loa.end_date}\n• **Approved By:** <@${actionedByUserId}>\n\nYour LOA role has been applied. You are protected from shift activity checks while on leave. Please return promptly on ${loa.end_date}.`
             });
         }
     } catch (e) {}
@@ -74,7 +74,7 @@ module.exports = [
                 )
                 .setColor(config.colors.warning)
                 .setTimestamp()
-                .setFooter({ text: 'FreshlyPlaza HR Portal', iconURL: interaction.guild.iconURL() });
+                .setFooter({ text: 'Grandway Shopping HR Portal', iconURL: interaction.guild.iconURL() });
 
             const hrRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`loa_approve_${loa.id}`).setLabel('✅ Approve LOA').setStyle(ButtonStyle.Success),
@@ -102,7 +102,7 @@ module.exports = [
                               member.permissions.has(PermissionFlagsBits.Administrator);
 
             if (!isManager) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Leadership / HR can approve LOA requests.', ephemeral: true });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Leadership / HR can approve LOA requests.', ephemeral: true });
             }
 
             const db = getDb();
@@ -141,7 +141,7 @@ module.exports = [
                               member.permissions.has(PermissionFlagsBits.Administrator);
 
             if (!isManager) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Leadership / HR can deny LOA requests.', ephemeral: true });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Leadership / HR can deny LOA requests.', ephemeral: true });
             }
 
             const db = getDb();
@@ -160,7 +160,7 @@ module.exports = [
                 const user = await interaction.client.users.fetch(loa.user_id);
                 if (user) {
                     await user.send({
-                        content: `❌ **Your FreshlyPlaza LOA Request #${loa.id} was DENIED.**\n• **Reason:** ${denialReason}\n• **Actioned By:** <@${interaction.user.id}>\n\nIf you have questions, please reach out to Management.`
+                        content: `❌ **Your Grandway Shopping LOA Request #${loa.id} was DENIED.**\n• **Reason:** ${denialReason}\n• **Actioned By:** <@${interaction.user.id}>\n\nIf you have questions, please reach out to Management.`
                     });
                 }
             } catch (e) {}
@@ -183,7 +183,7 @@ module.exports = [
             }
 
             const embed = new EmbedBuilder()
-                .setTitle('🌴 FreshlyPlaza — Leave of Absence (LOA) Portal')
+                .setTitle('🌴 Grandway Shopping — Leave of Absence (LOA) Portal')
                 .setDescription(
                     `Staff members requiring time off from shifts, duties, or activity checks must submit an official Leave of Absence.\n\n` +
                     `📌 **Guidelines:**\n` +
@@ -193,7 +193,7 @@ module.exports = [
                     `Click the button below to fill out your LOA request form.`
                 )
                 .setColor(config.colors.secondary)
-                .setFooter({ text: 'FreshlyPlaza Human Resources' });
+                .setFooter({ text: 'Grandway Shopping Human Resources' });
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()

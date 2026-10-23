@@ -5,7 +5,7 @@ const { fetchRobloxUserProfile } = require('../utils/robloxLookup');
 
 /**
  * Parses staff data entry submissions, extracts credentials,
- * and synchronizes them into the FreshlyPlaza database.
+ * and synchronizes them into the Grandway Shopping database.
  */
 function parseStaffDataEntry(text, fallbackUserId) {
     const getField = (pattern) => {
@@ -132,7 +132,7 @@ async function fixSpagDataEntry(parsed) {
                 messages: [
                     {
                         role: 'system',
-                        content: 'You fix spelling, punctuation, capitalization, and grammar (SPaG) for staff profile fields in a Roblox supermarket (FreshlyPlaza).\n' +
+                        content: 'You fix spelling, punctuation, capitalization, and grammar (SPaG) for staff profile fields in a Roblox supermarket (Grandway Shopping).\n' +
                                  'CRITICAL RULES:\n' +
                                  '1. Do NOT modify Roblox usernames, Discord IDs, or Roblox IDs.\n' +
                                  '2. Fix typos, capitalization (e.g. capitalize standalone "I", months, days, first letters of sentences), commas, and grammar in text fields.\n' +
@@ -191,7 +191,7 @@ async function handleDataEntriesMessage(message) {
         return;
     }
 
-    const hasHeader = content.includes('FRESHLYPLAZA STAFF DATA ENTRY') ||
+    const hasHeader = content.includes('GRANDWAY SHOPPING STAFF DATA ENTRY') ||
                       (content.includes('Preferred Name') && content.includes('Roblox Username'));
 
     // If in target channel but no header/template is provided, check if format is followed
@@ -279,7 +279,7 @@ async function handleDataEntriesMessage(message) {
         )
         .setColor(config.colors.primary)
         .setThumbnail(robloxProfile?.headshotUrl || message.author.displayAvatarURL({ dynamic: true }))
-        .setFooter({ text: 'FreshlyPlaza Roster AI Parser • SPaG Cleaned', iconURL: message.guild.iconURL() })
+        .setFooter({ text: 'Grandway Shopping Roster AI Parser • SPaG Cleaned', iconURL: message.guild.iconURL() })
         .setTimestamp();
 
     if (parsed.notes) {

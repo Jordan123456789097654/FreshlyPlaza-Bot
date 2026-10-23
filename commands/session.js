@@ -23,9 +23,9 @@ function buildShiftAnnouncementEmbed(session, guild) {
     const worldTime = formatWorldTime(session.started_at);
 
     const embed = new EmbedBuilder()
-        .setTitle('🏪 FreshlyPlaza — Store Shift Commenced!')
+        .setTitle('🏪 Grandway Shopping — Store Shift Commenced!')
         .setDescription(
-            `An official store shift is now **OPEN & LIVE** at **FreshlyPlaza**!\n` +
+            `An official store shift is now **OPEN & LIVE** at **Grandway Shopping**!\n` +
             `Come down to shop our fresh bakery, grocery aisles, or join the colleague team on duty!`
         )
         .addFields(
@@ -56,7 +56,7 @@ function buildShiftAnnouncementEmbed(session, guild) {
             },
             { 
                 name: '🛒 In-Game Store Link', 
-                value: `[**Join FreshlyPlaza V2 Server**](${storeLink})`, 
+                value: `[**Join Grandway Shopping V2 Server**](${storeLink})`, 
                 inline: true 
             }
         );
@@ -70,8 +70,8 @@ function buildShiftAnnouncementEmbed(session, guild) {
     }
 
     embed.setColor(config.colors.primary)
-        .setImage('https://media.discordapp.net/attachments/1509272778711367860/1294333671750697000/freshlyplaza_banner.png')
-        .setFooter({ text: `Shift #${session.id} • FreshlyPlaza Store Operations`, iconURL: guild ? guild.iconURL() : null })
+        .setImage('https://media.discordapp.net/attachments/1509272778711367860/1294333671750697000/grandway shopping_banner.png')
+        .setFooter({ text: `Shift #${session.id} • Grandway Shopping Store Operations`, iconURL: guild ? guild.iconURL() : null })
         .setTimestamp();
 
     return embed;
@@ -93,7 +93,7 @@ module.exports = [
             .setName('session-start')
             .setDescription('Start a new store shift session')
             .addUserOption(opt => opt.setName('cohost').setDescription('Shift Co-Host (Optional)').setRequired(false))
-            .addStringOption(opt => opt.setName('link').setDescription('Roblox Game/Server Link (Default: FreshlyPlazza-V2)').setRequired(false)),
+            .addStringOption(opt => opt.setName('link').setDescription('Roblox Game/Server Link (Default: GrandwayPlazza-V2)').setRequired(false)),
         async execute(interaction) {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const db = getDb();
@@ -118,7 +118,7 @@ module.exports = [
             if (shiftsChannel) {
                 // Post Clean Dedicated Store Shift Banner
                 const mainMsg = await shiftsChannel.send({
-                    content: `<@&${config.roles.shiftPing}> 📢 **FRESHLYPLAZA STORE SHIFT IS NOW OPEN!**`,
+                    content: `<@&${config.roles.shiftPing}> 📢 **GRANDWAY SHOPPING STORE SHIFT IS NOW OPEN!**`,
                     embeds: [shiftEmbed],
                     components: [joinRow]
                 });
@@ -137,7 +137,7 @@ module.exports = [
                             `🚨 **Policy:** You voted YES — failure to join the game server during this shift will result in staff moderation.`
                         )
                         .setColor(config.colors.warning)
-                        .setFooter({ text: 'FreshlyPlaza Operations • Attendance Enforcement' });
+                        .setFooter({ text: 'Grandway Shopping Operations • Attendance Enforcement' });
 
                     await shiftsChannel.send({
                         content: voterPings,
@@ -185,7 +185,7 @@ module.exports = [
             )
             .addStringOption(opt => 
                 opt.setName('link')
-                    .setDescription('Roblox Store Link (Default: FreshlyPlazza-V2)')
+                    .setDescription('Roblox Store Link (Default: GrandwayPlazza-V2)')
                     .setRequired(false)
             ),
         async execute(interaction) {
@@ -263,10 +263,10 @@ module.exports = [
             const worldTime = formatWorldTime(startTime);
 
             const schedEmbed = new EmbedBuilder()
-                .setTitle('⏰ FreshlyPlaza — Store Shift Scheduled!')
+                .setTitle('⏰ Grandway Shopping — Store Shift Scheduled!')
                 .setDescription(
                     `A store shift has been officially scheduled for **<t:${startTimestamp}:F>** (<t:${startTimestamp}:R>)!\n` +
-                    `Get ready to shop and work at FreshlyPlaza V2.`
+                    `Get ready to shop and work at Grandway Shopping V2.`
                 )
                 .addFields(
                     { name: '👤 Shift Host', value: `<@${interaction.user.id}>`, inline: true },
@@ -284,13 +284,13 @@ module.exports = [
 
             schedEmbed.setColor(config.colors.secondary)
                 .setTimestamp()
-                .setFooter({ text: 'FreshlyPlaza Shift Scheduling • 24h Advance Notice', iconURL: interaction.guild.iconURL() });
+                .setFooter({ text: 'Grandway Shopping Shift Scheduling • 24h Advance Notice', iconURL: interaction.guild.iconURL() });
 
             if (note) {
                 schedEmbed.addFields({ name: '📝 Shift Notes / Focus', value: note, inline: false });
             }
 
-            schedEmbed.addFields({ name: '🔗 Store Link', value: `[Join FreshlyPlaza Game](${storeLink})`, inline: false });
+            schedEmbed.addFields({ name: '🔗 Store Link', value: `[Join Grandway Shopping Game](${storeLink})`, inline: false });
 
             const shiftsChannelId = config.channels.shifts;
             let shiftsChannel = interaction.guild.channels.cache.get(shiftsChannelId);
@@ -350,7 +350,7 @@ module.exports = [
                         updatedDb.save();
                         if (shiftsChannel) {
                             await shiftsChannel.send({
-                                content: `<@&${config.roles.shiftPing}> ⚠️ **5-MINUTE REMINDER:** Store shift hosted by <@${interaction.user.id}> opens in **5 minutes**!\n👉 [Join FreshlyPlaza Now](${storeLink})`
+                                content: `<@&${config.roles.shiftPing}> ⚠️ **5-MINUTE REMINDER:** Store shift hosted by <@${interaction.user.id}> opens in **5 minutes**!\n👉 [Join Grandway Shopping Now](${storeLink})`
                             });
                         }
                     }
@@ -419,7 +419,7 @@ module.exports = [
                             content: `❌ **SCHEDULED STORE SHIFT CANCELLED**`,
                             embeds: [
                                 new EmbedBuilder()
-                                    .setTitle('❌ FreshlyPlaza — Scheduled Shift Cancelled')
+                                    .setTitle('❌ Grandway Shopping — Scheduled Shift Cancelled')
                                     .setDescription(`The store shift scheduled by <@${sched.host_id}> has been cancelled.\n**Reason:** ${reason}`)
                                     .setColor(config.colors.danger)
                                     .setTimestamp()
@@ -471,10 +471,10 @@ module.exports = [
 
             // Feature #4: Live Edit the original announcement message to CLOSED & disabled buttons
             const concludeEmbed = new EmbedBuilder()
-                .setTitle('🛑 FreshlyPlaza — Shift Concluded (Store Closed)')
+                .setTitle('🛑 Grandway Shopping — Shift Concluded (Store Closed)')
                 .setDescription(
                     `Store Shift **#${activeSession.id}** hosted by <@${activeSession.host_id}> has officially **concluded**.\n\n` +
-                    `Thank you to all employees and customers who visited FreshlyPlaza today!`
+                    `Thank you to all employees and customers who visited Grandway Shopping today!`
                 )
                 .addFields(
                     { name: '🔴 Store Status', value: '`CLOSED`', inline: true },
@@ -483,7 +483,7 @@ module.exports = [
                     { name: `👥 Attendance Credited (${attendeeIds.length})`, value: attendeeIds.length > 0 ? attendeeIds.map(u => `<@${u}>`).join(', ') : '*None recorded*', inline: false }
                 )
                 .setColor(config.colors.danger)
-                .setFooter({ text: 'FreshlyPlaza Operations • Shift Concluded', iconURL: interaction.guild.iconURL() })
+                .setFooter({ text: 'Grandway Shopping Operations • Shift Concluded', iconURL: interaction.guild.iconURL() })
                 .setTimestamp();
 
             const shiftsChannel = interaction.guild.channels.cache.get(config.channels.shifts);
@@ -535,7 +535,7 @@ module.exports = [
             await db.run(`UPDATE sessions SET status = 'CANCELLED', concluded_at = CURRENT_TIMESTAMP WHERE id = ?`, [activeSession.id]);
 
             const cancelEmbed = new EmbedBuilder()
-                .setTitle('❌ FreshlyPlaza — Shift Cancelled')
+                .setTitle('❌ Grandway Shopping — Shift Cancelled')
                 .setDescription(`Store Shift **#${activeSession.id}** has been cancelled.\n**Reason:** ${reason}`)
                 .setColor(config.colors.danger)
                 .setTimestamp();
@@ -618,7 +618,7 @@ module.exports = [
 
             if (shiftsChannel) {
                 const handoffEmbed = new EmbedBuilder()
-                    .setTitle('🔄 FreshlyPlaza — Shift Host Handoff')
+                    .setTitle('🔄 Grandway Shopping — Shift Host Handoff')
                     .setDescription(`Store Shift **#${activeSession.id}** controls have been officially transferred!`)
                     .addFields(
                         { name: '👑 New Shift Host', value: `<@${newHost.id}>`, inline: true },
@@ -727,7 +727,7 @@ module.exports = [
                     { name: '🔗 Store Link', value: `[Join Shift Store](${activeSession.store_link})`, inline: false }
                 )
                 .setColor(config.colors.secondary)
-                .setFooter({ text: 'FreshlyPlaza Shift Operations' })
+                .setFooter({ text: 'Grandway Shopping Shift Operations' })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });

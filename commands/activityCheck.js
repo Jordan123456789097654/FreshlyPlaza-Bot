@@ -75,7 +75,7 @@ async function runActivityAudit(guild, checkRecord) {
         )
         .setColor(config.colors.danger)
         .setTimestamp()
-        .setFooter({ text: 'FreshlyPlaza Foundership Audit Log', iconURL: guild.iconURL() });
+        .setFooter({ text: 'Grandway Shopping Foundership Audit Log', iconURL: guild.iconURL() });
 
     if (inactiveStaff.length === 0) {
         reportEmbed.addFields({ name: '❌ Inactive Staff (Role Removal Required)', value: '*All staff members confirmed activity!*', inline: false });
@@ -272,7 +272,7 @@ module.exports = [
                     }
                 )
                 .setColor(config.colors.danger)
-                .setFooter({ text: 'FreshlyPlaza Management & Foundership Team', iconURL: interaction.guild.iconURL() })
+                .setFooter({ text: 'Grandway Shopping Management & Foundership Team', iconURL: interaction.guild.iconURL() })
                 .setTimestamp();
 
             const actionRow = new ActionRowBuilder().addComponents(

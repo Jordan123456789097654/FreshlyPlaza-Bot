@@ -163,7 +163,7 @@ module.exports = {
                     `**Allegation Details:**\n\`\`\`\n${allegation}\n\`\`\``
                 )
                 .setColor(priority === 'CRITICAL' ? 0xE74C3C : 0xF39C12)
-                .setFooter({ text: 'FreshlyPlaza Internal Affairs Division • Case File' })
+                .setFooter({ text: 'Grandway Shopping Internal Affairs Division • Case File' })
                 .setTimestamp();
 
             // Dispatch case docket to Trust & Safety server's dockets channel
@@ -253,7 +253,7 @@ module.exports = {
                     `**Findings & Judicial Rationale:**\n\`\`\`\n${rationale}\n\`\`\``
                 )
                 .setColor(colors[decision] || 0x34495E)
-                .setFooter({ text: 'FreshlyPlaza Disciplinary Board • Formal Order' })
+                .setFooter({ text: 'Grandway Shopping Disciplinary Board • Formal Order' })
                 .setTimestamp();
 
             // Post to #ia-disciplinary-findings in Trust & Safety server
@@ -300,7 +300,7 @@ module.exports = {
                 )
                 .setColor(caseObj.status === 'OPEN' ? 0xF39C12 : 0x2ECC71)
                 .setThumbnail(caseObj.target_user.avatar || undefined)
-                .setFooter({ text: 'FreshlyPlaza Classified IA Case Docket' });
+                .setFooter({ text: 'Grandway Shopping Classified IA Case Docket' });
 
             return interaction.followUp({ embeds: [viewEmbed] });
         }

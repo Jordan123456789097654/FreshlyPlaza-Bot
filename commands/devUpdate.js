@@ -112,7 +112,7 @@ module.exports = [
 
             // Construct Embed
             const embed = new EmbedBuilder()
-                .setTitle(`🛠️ FreshlyPlaza — ${updateTitle}${version ? ` (${version})` : ''}`)
+                .setTitle(`🛠️ Grandway Shopping — ${updateTitle}${version ? ` (${version})` : ''}`)
                 .setColor(config.colors.primary)
                 .setDescription(
                     `A brand new development update has been deployed to **${config.storeName}**!\n` +
@@ -120,7 +120,7 @@ module.exports = [
                 )
                 .setThumbnail(interaction.guild.iconURL({ dynamic: true }) || null)
                 .setFooter({
-                    text: `Announced by ${interaction.user.tag} • FreshlyPlaza Development Team`,
+                    text: `Announced by ${interaction.user.tag} • Grandway Shopping Development Team`,
                     iconURL: interaction.user.displayAvatarURL({ dynamic: true })
                 })
                 .setTimestamp();
@@ -141,7 +141,7 @@ module.exports = [
                 },
                 {
                     name: '🎮 Play Store Experience',
-                    value: `[**Join FreshlyPlaza Game**](${config.robloxGameLink})`,
+                    value: `[**Join Grandway Shopping Game**](${config.robloxGameLink})`,
                     inline: true
                 }
             );

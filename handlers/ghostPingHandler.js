@@ -78,7 +78,7 @@ async function handleGhostPing(message) {
                 { name: '💬 Deleted Content', value: tracked.content ? `>>> ${tracked.content.slice(0, 1000)}` : '*No text content*', inline: false }
             )
             .setColor(config.colors.warning)
-            .setFooter({ text: 'FreshlyPlaza Anti-Ghost Ping System' })
+            .setFooter({ text: 'Grandway Shopping Anti-Ghost Ping System' })
             .setTimestamp();
 
         // 1. Call out in the channel

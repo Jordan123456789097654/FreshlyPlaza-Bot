@@ -6,7 +6,7 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('bug-report')
-            .setDescription('Submit a bug report to FreshlyPlaza developers')
+            .setDescription('Submit a bug report to Grandway Shopping developers')
             .addStringOption(opt => opt.setName('title').setDescription('Short bug title').setRequired(true))
             .addStringOption(opt => opt.setName('details').setDescription('Detailed description of the bug').setRequired(true))
             .addStringOption(opt => opt.setName('steps').setDescription('Steps to reproduce (Optional)').setRequired(false)),
@@ -32,7 +32,7 @@ module.exports = [
                 )
                 .setColor(config.colors.warning)
                 .setTimestamp()
-                .setFooter({ text: 'FreshlyPlaza Bug Tracker', iconURL: interaction.guild.iconURL() });
+                .setFooter({ text: 'Grandway Shopping Bug Tracker', iconURL: interaction.guild.iconURL() });
 
             const bugsChannel = interaction.guild.channels.cache.get(config.channels.bugsReport);
             if (bugsChannel) {

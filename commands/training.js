@@ -39,7 +39,7 @@ module.exports = [
             const worldTime = formatWorldTime(now);
 
             const embed = new EmbedBuilder()
-                .setTitle(`🎓 FreshlyPlaza — ${type} Training Session`)
+                .setTitle(`🎓 Grandway Shopping — ${type} Training Session`)
                 .setDescription(
                     `An official training session for **${type}** has been scheduled!\n` +
                     `All eligible trainees and applicants should arrive at the training center on time.`
@@ -61,7 +61,7 @@ module.exports = [
             }
 
             embed.setColor(config.colors.primary)
-                .setFooter({ text: 'FreshlyPlaza HR & Training Academy', iconURL: interaction.guild.iconURL() })
+                .setFooter({ text: 'Grandway Shopping HR & Training Academy', iconURL: interaction.guild.iconURL() })
                 .setTimestamp();
 
             const joinRow = new ActionRowBuilder().addComponents(
@@ -119,14 +119,14 @@ module.exports = [
             let dmSent = false;
             try {
                 const dmEmbed = new EmbedBuilder()
-                    .setTitle('🎉 FreshlyPlaza — Congratulations, You Passed Training!')
-                    .setDescription(`Hello <@${trainee.id}>,\n\nYou have officially **PASSED** your training session at **FreshlyPlaza**!\n\nWelcome to the team! You may now begin attending store shifts, assisting customers, and working duty stations.`)
+                    .setTitle('🎉 Grandway Shopping — Congratulations, You Passed Training!')
+                    .setDescription(`Hello <@${trainee.id}>,\n\nYou have officially **PASSED** your training session at **Grandway Shopping**!\n\nWelcome to the team! You may now begin attending store shifts, assisting customers, and working duty stations.`)
                     .addFields(
                         { name: '🛡️ Evaluator', value: `<@${interaction.user.id}>`, inline: true },
                         { name: '📝 Performance Notes', value: notes, inline: false }
                     )
                     .setColor(config.colors.primary)
-                    .setFooter({ text: 'FreshlyPlaza HR & Training Academy', iconURL: interaction.guild.iconURL() })
+                    .setFooter({ text: 'Grandway Shopping HR & Training Academy', iconURL: interaction.guild.iconURL() })
                     .setTimestamp();
 
                 await trainee.send({ embeds: [dmEmbed] });
@@ -199,14 +199,14 @@ module.exports = [
             let dmSent = false;
             try {
                 const dmEmbed = new EmbedBuilder()
-                    .setTitle('📚 FreshlyPlaza — Training Session Notice')
-                    .setDescription(`Hello <@${trainee.id}>,\n\nUnfortunately, you did not pass your training session today at **FreshlyPlaza**.\nDon't be discouraged! You are encouraged to review the employee guide and re-attempt during the next open training session.`)
+                    .setTitle('📚 Grandway Shopping — Training Session Notice')
+                    .setDescription(`Hello <@${trainee.id}>,\n\nUnfortunately, you did not pass your training session today at **Grandway Shopping**.\nDon't be discouraged! You are encouraged to review the employee guide and re-attempt during the next open training session.`)
                     .addFields(
                         { name: '🛡️ Evaluator', value: `<@${interaction.user.id}>`, inline: true },
                         { name: '📝 Feedback / Reason', value: reason, inline: false }
                     )
                     .setColor(config.colors.danger)
-                    .setFooter({ text: 'FreshlyPlaza HR & Training Academy' })
+                    .setFooter({ text: 'Grandway Shopping HR & Training Academy' })
                     .setTimestamp();
 
                 await trainee.send({ embeds: [dmEmbed] });

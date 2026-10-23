@@ -18,7 +18,7 @@ module.exports = [
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can sound the emergency leadership alarm.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can sound the emergency leadership alarm.', flags: MessageFlags.Ephemeral });
             }
 
             const situation = interaction.options.getString('situation');
@@ -70,7 +70,7 @@ module.exports = [
             const data = db.getData();
             if (!data.ticket_snippets) {
                 data.ticket_snippets = {
-                    shifts: 'FreshlyPlaza supermarket shifts are hosted daily by management! You can check <#1505309843219546223> for active store sessions.',
+                    shifts: 'Grandway Shopping supermarket shifts are hosted daily by management! You can check <#1505309843219546223> for active store sessions.',
                     tillreset: 'To reset a frozen self-checkout till, step away from the scan area for 3 seconds. If the scanner remains locked, a Colleague can apply an override key.',
                     appealinfo: 'Moderation appeals require at least a 48-hour wait period. Please state your Discord tag, Roblox username, and explain why your punishment should be lifted.'
                 };
@@ -103,7 +103,7 @@ module.exports = [
                 }
 
                 const snippetEmbed = new EmbedBuilder()
-                    .setAuthor({ name: 'FreshlyPlaza Support Snippet', iconURL: interaction.guild.iconURL() || undefined })
+                    .setAuthor({ name: 'Grandway Shopping Support Snippet', iconURL: interaction.guild.iconURL() || undefined })
                     .setDescription(snippet)
                     .setColor(config.colors.secondary)
                     .setFooter({ text: `Dispatched by ${interaction.user.tag}` })

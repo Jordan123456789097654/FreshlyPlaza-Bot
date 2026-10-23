@@ -21,7 +21,8 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildModeration,
-        GatewayIntentBits.GuildPresences
+        GatewayIntentBits.GuildPresences,
+        GatewayIntentBits.GuildVoiceStates
     ]
 });
 
@@ -39,7 +40,7 @@ client.healthControl = {
         if (client.isReady()) {
             if (status === 'MAINTENANCE') {
                 client.user.setPresence({
-                    activities: [{ name: '⚠️ Under Maintenance • FreshlyPlaza', type: ActivityType.Custom }],
+                    activities: [{ name: '⚠️ Under Maintenance • Grandway Shopping', type: ActivityType.Custom }],
                     status: 'dnd'
                 });
             } else if (status === 'DOWN') {
@@ -67,7 +68,7 @@ client.healthControl = {
         overrideSetAt = null;
         if (client.isReady()) {
             client.user.setPresence({
-                activities: [{ name: 'FreshlyPlaza Grocery Store 🛒', type: ActivityType.Watching }],
+                activities: [{ name: 'Grandway Shopping 🛒', type: ActivityType.Watching }],
                 status: 'online'
             });
         }
@@ -151,7 +152,7 @@ for (const file of commandFiles) {
 
 client.once('clientReady', async () => {
     console.log(`==========================================`);
-    console.log(`🚀 FreshlyPlaza Discord Bot is ONLINE!`);
+    console.log(`🚀 Grandway Shopping Discord Bot is ONLINE!`);
     console.log(`Logged in as: ${client.user.tag}`);
     console.log(`Registered Commands: ${client.commands.size}`);
     console.log(`==========================================`);
@@ -181,7 +182,7 @@ client.once('clientReady', async () => {
         try {
             if (overrideStatus === 'MAINTENANCE') {
                 client.user.setPresence({
-                    activities: [{ name: '⚠️ Under Maintenance • FreshlyPlaza', type: ActivityType.Custom }],
+                    activities: [{ name: '⚠️ Under Maintenance • Grandway Shopping', type: ActivityType.Custom }],
                     status: 'dnd'
                 });
                 return;
@@ -210,7 +211,7 @@ client.once('clientReady', async () => {
             const staffCount = guild ? guild.members.cache.filter(m => m.roles.cache.has(config.roles.staff) && !m.user.bot).size : 15;
 
             const statuses = [
-                { name: 'FreshlyPlaza Grocery Store 🛒', type: ActivityType.Watching },
+                { name: 'Grandway Shopping 🛒', type: ActivityType.Watching },
                 { name: `${memberCount} Fresh Customers 🏪`, type: ActivityType.Watching },
                 { name: `${staffCount} Staff Members on Duty 👔`, type: ActivityType.Watching },
                 { name: '/help • Fresh Grocery Needs 🥦', type: ActivityType.Playing },
@@ -255,7 +256,7 @@ client.once('clientReady', async () => {
                     db.save();
                     if (shiftsChannel) {
                         await shiftsChannel.send({
-                            content: `<@&${config.roles.shiftPing}> ⚠️ **5-MINUTE REMINDER:** Store shift hosted by <@${sched.host_id}> opens in **5 minutes**!\n👉 [Join FreshlyPlaza Now](${sched.store_link || config.robloxGameLink})`
+                            content: `<@&${config.roles.shiftPing}> ⚠️ **5-MINUTE REMINDER:** Store shift hosted by <@${sched.host_id}> opens in **5 minutes**!\n👉 [Join Grandway Shopping Now](${sched.store_link || config.robloxGameLink})`
                         });
                     }
                 }
@@ -436,10 +437,10 @@ client.once('clientReady', async () => {
                     const alreadySent = await db.hasBanAppealBeenSent(user.id);
                     if (alreadySent) continue;
 
-                    const banReason = reason || 'Violation of FreshlyPlaza community guidelines';
+                    const banReason = reason || 'Violation of Grandway Shopping community guidelines';
 
                     const appealEmbed = new EmbedBuilder()
-                        .setTitle(`⚖️ FreshlyPlaza — Notice of Server Ban & Appeal Information`)
+                        .setTitle(`⚖️ Grandway Shopping — Notice of Server Ban & Appeal Information`)
                         .setDescription(
                             `Hello **${user.username}**,\n\n` +
                             `You have been banned from the **${guild.name}** Discord server.\n\n` +
@@ -462,7 +463,7 @@ client.once('clientReady', async () => {
                         )
                         .setColor(config.colors.danger)
                         .setThumbnail(guild.iconURL({ dynamic: true }) || undefined)
-                        .setFooter({ text: 'FreshlyPlaza Moderation & Appeals Department' })
+                        .setFooter({ text: 'Grandway Shopping Moderation & Appeals Department' })
                         .setTimestamp();
 
                     try {
@@ -620,7 +621,7 @@ client.on('guildBanAdd', async (ban) => {
         console.log(`[BAN DETECTED] User ${user.tag} (${user.id}) was banned in ${guild.name}. Reason: ${reason || 'None specified'}`);
 
         // Fetch audit logs for moderator attribution if available
-        let moderatorTag = 'FreshlyPlaza Moderation Team';
+        let moderatorTag = 'Grandway Shopping Moderation Team';
         try {
             const auditLogs = await guild.fetchAuditLogs({ limit: 1, type: 22 }); // 22 = MEMBER_BAN_ADD
             const banLog = auditLogs.entries.first();
@@ -629,10 +630,10 @@ client.on('guildBanAdd', async (ban) => {
             }
         } catch (e) {}
 
-        const banReason = reason || 'Violation of FreshlyPlaza community guidelines';
+        const banReason = reason || 'Violation of Grandway Shopping community guidelines';
 
         const appealEmbed = new EmbedBuilder()
-            .setTitle(`⚖️ FreshlyPlaza — Notice of Server Ban & Appeal Information`)
+            .setTitle(`⚖️ Grandway Shopping — Notice of Server Ban & Appeal Information`)
             .setDescription(
                 `Hello **${user.username}**,\n\n` +
                 `You have been banned from the **${guild.name}** Discord server.\n\n` +
@@ -656,7 +657,7 @@ client.on('guildBanAdd', async (ban) => {
             )
             .setColor(config.colors.danger)
             .setThumbnail(guild.iconURL({ dynamic: true }) || undefined)
-            .setFooter({ text: 'FreshlyPlaza Moderation & Appeals Department' })
+            .setFooter({ text: 'Grandway Shopping Moderation & Appeals Department' })
             .setTimestamp();
 
         // Check if appeal has already been dispatched to this user
@@ -942,7 +943,7 @@ const server = http.createServer((req, res) => {
             notice: metrics.reason,
             is_healthy: isHealthy,
             mode_type: metrics.overrideStatus ? 'MANUAL_OVERRIDE' : 'AUTOMATIC',
-            bot: client.user ? client.user.tag : 'FreshlyPlaza Utils',
+            bot: client.user ? client.user.tag : 'Grandway Shopping Utils',
             ping: metrics.ping >= 0 ? `${metrics.ping}ms` : 'calculating',
             uptime_seconds: metrics.uptimeSeconds,
             uptime_formatted: `${Math.floor(metrics.uptimeSeconds / 3600)}h ${Math.floor((metrics.uptimeSeconds % 3600) / 60)}m ${metrics.uptimeSeconds % 60}s`,

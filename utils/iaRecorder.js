@@ -336,7 +336,7 @@ function generateInteractivePlayerHtml(data) {
 
     <div class="header">
         <div>
-            <h2>🛡️ FreshlyPlaza Internal Affairs — Wiretap Record</h2>
+            <h2>🛡️ Grandway Shopping Internal Affairs — Wiretap Record</h2>
             <p style="color: var(--text-dim); font-size: 13px; margin-top: 4px;">Case Record: <strong>${data.id}</strong> | Voice Channel: <strong>#${data.channelName}</strong> | Retention: 30 Days (Expires: ${new Date(data.expiresAt).toLocaleDateString()})</p>
         </div>
         <div class="badge">Classified Confidential</div>

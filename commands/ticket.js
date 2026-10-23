@@ -21,7 +21,7 @@ const SUPPORT_TAGS = {
         title: '👋 Staff Intro: General Support',
         emoji: '👋',
         color: config.colors.primary,
-        desc: 'Hello {customer}! My name is **{staff}** from the FreshlyPlaza Support Team.\n\nI will be assisting you with your ticket today. Please let me know how I can help or clarify your inquiry!'
+        desc: 'Hello {customer}! My name is **{staff}** from the Grandway Shopping Support Team.\n\nI will be assisting you with your ticket today. Please let me know how I can help or clarify your inquiry!'
     },
     intro_investigating: {
         title: '🔍 Staff Intro: Under Investigation',
@@ -33,7 +33,7 @@ const SUPPORT_TAGS = {
         title: '💼 Staff Intro: Management Handover',
         emoji: '💼',
         color: config.colors.warning,
-        desc: 'Hello {customer}, this is **{staff}** from FreshlyPlaza Store Leadership & Management.\n\nThank you for reaching out regarding this matter. I am reviewing the specifics of your request and will provide formal guidance momentarily.'
+        desc: 'Hello {customer}, this is **{staff}** from Grandway Shopping Store Leadership & Management.\n\nThank you for reaching out regarding this matter. I am reviewing the specifics of your request and will provide formal guidance momentarily.'
     },
     proof: {
         title: '📸 Proof & Evidence Required',
@@ -42,16 +42,16 @@ const SUPPORT_TAGS = {
         desc: 'To properly investigate and action reports regarding player behavior, exploiter activity, or staff misconduct, **clear, unedited screenshot or video proof is mandatory**.\n\nPlease upload your screenshot or record link directly here. Reports without evidence cannot be actioned.'
     },
     shifts: {
-        title: '🕒 FreshlyPlaza Shift Information',
+        title: '🕒 Grandway Shopping Shift Information',
         emoji: '🕒',
         color: config.colors.secondary,
-        desc: 'FreshlyPlaza supermarket shifts are hosted daily by our management team!\n\n• Check <#1505309843219546223> for ongoing store shifts.\n• You can register for upcoming shift alerts or attend in-game at [FreshlyPlaza Supermarket](https://www.roblox.com/games/76637220767393/FreshlyPlazza-V2).'
+        desc: 'Grandway Shopping supermarket shifts are hosted daily by our management team!\n\n• Check <#1505309843219546223> for ongoing store shifts.\n• You can register for upcoming shift alerts or attend in-game at [Grandway Shopping Supermarket](https://www.roblox.com/games/76637220767393/FreshlyPlazza-V2).'
     },
     apply: {
         title: '💼 Staff & Developer Applications',
         emoji: '💼',
         color: config.colors.primary,
-        desc: 'Thank you for your interest in working with FreshlyPlaza!\n\nApplications for Developer, Store Staff, and Management positions are reviewed directly by leadership here in support tickets.\n\nPlease provide your Roblox username, past portfolio/experience, and reasons for joining so our team can evaluate your application.'
+        desc: 'Thank you for your interest in working with Grandway Shopping!\n\nApplications for Developer, Store Staff, and Management positions are reviewed directly by leadership here in support tickets.\n\nPlease provide your Roblox username, past portfolio/experience, and reasons for joining so our team can evaluate your application.'
     },
     verify: {
         title: '🎮 Roblox Account Verification',
@@ -124,7 +124,7 @@ const TICKET_CATEGORIES = {
     general: {
         label: 'Customer & General Support',
         emoji: '🛒',
-        description: 'Help with FreshlyPlaza Roblox store, checkout, and discord',
+        description: 'Help with Grandway Shopping Roblox store, checkout, and discord',
         roleKey: 'supportGeneral',
         color: config.colors.secondary
     },
@@ -175,7 +175,7 @@ async function buildTicketPanelEmbed(guild) {
 
     if (!settings.enabled) {
         const disabledEmbed = new EmbedBuilder()
-            .setTitle('🎫 FreshlyPlaza Support Center — Temporarily Paused')
+            .setTitle('🎫 Grandway Shopping Support Center — Temporarily Paused')
             .setDescription(
                 `⚠️ **Support Tickets are Currently Paused**\n\n` +
                 `${settings.disabled_reason || 'Support tickets are temporarily closed for scheduled maintenance.'}\n\n` +
@@ -183,7 +183,7 @@ async function buildTicketPanelEmbed(guild) {
             )
             .setColor(config.colors.warning)
             .setThumbnail(guild ? guild.iconURL({ dynamic: true }) : null)
-            .setFooter({ text: 'FreshlyPlaza Support • Status: Paused' });
+            .setFooter({ text: 'Grandway Shopping Support • Status: Paused' });
 
         if (settings.panel_image_url) {
             disabledEmbed.setImage(settings.panel_image_url);
@@ -259,9 +259,9 @@ async function buildTicketPanelEmbed(guild) {
     }
 
     const embed = new EmbedBuilder()
-        .setTitle('🎫 FreshlyPlaza — Customer & Staff Support Center')
+        .setTitle('🎫 Grandway Shopping — Customer & Staff Support Center')
         .setDescription(
-            `Welcome to the **FreshlyPlaza Support System**!\n` +
+            `Welcome to the **Grandway Shopping Support System**!\n` +
             `Our automated AI Assistant and dedicated department staff are here to help.\n\n` +
             `📊 **Live Support Queue & Response Status:**\n` +
             `> 🟢 **Staff on Duty:** \`${activeStaffCount} Colleagues Online\`\n` +
@@ -270,7 +270,7 @@ async function buildTicketPanelEmbed(guild) {
             `📋 **Active Tickets by Category:**\n` +
             `> 🛒 General: \`${catCounts.general}\` • 🛡️ Report: \`${catCounts.report}\` • 💼 Management: \`${catCounts.management}\`\n` +
             `> 🐛 Technical: \`${catCounts.technical}\` • ⚖️ Appeals: \`${catCounts.appeals}\` • 📁 Data Entries: \`${catCounts.data_entries}\`\n\n` +
-            `⚠️ **AI Beta Notice:** *Our automated AI assistant is currently in beta. All tickets opened will help train and refine our AI model to better serve FreshlyPlaza customers!*\n\n` +
+            `⚠️ **AI Beta Notice:** *Our automated AI assistant is currently in beta. All tickets opened will help train and refine our AI model to better serve Grandway Shopping customers!*\n\n` +
             `Select the appropriate category from the menu below to open your private support ticket.`
         )
         .addFields(
@@ -283,7 +283,7 @@ async function buildTicketPanelEmbed(guild) {
         )
         .setColor(config.colors.primary)
         .setThumbnail(guild ? guild.iconURL({ dynamic: true }) : null)
-        .setFooter({ text: `FreshlyPlaza Support Suite • ${totalOpenTickets} Open Tickets • Est: ${footerEst}`, iconURL: guild ? guild.iconURL() : null });
+        .setFooter({ text: `Grandway Shopping Support Suite • ${totalOpenTickets} Open Tickets • Est: ${footerEst}`, iconURL: guild ? guild.iconURL() : null });
 
     if (settings.panel_image_url) {
         embed.setImage(settings.panel_image_url);
@@ -348,7 +348,7 @@ module.exports = [
                                  (config.ignoredUserIds || []).includes(interaction.user.id);
 
             if (!isAuthorized) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff Management can deploy the ticket panel.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff Management can deploy the ticket panel.', flags: MessageFlags.Ephemeral });
             }
 
             const embed = await buildTicketPanelEmbed(interaction.guild);
@@ -411,7 +411,7 @@ module.exports = [
                 );
                 if (!isStaff) {
                     return interaction.editReply({
-                        content: '🚫 **Access Denied:** The `DATA-ENTRIES` category is strictly reserved for FreshlyPlaza Staff members.'
+                        content: '🚫 **Access Denied:** The `DATA-ENTRIES` category is strictly reserved for Grandway Shopping Staff members.'
                     });
                 }
             }
@@ -507,7 +507,7 @@ module.exports = [
                 .setDescription(
                     catConfig.aiDisabled
                         ? `Hello <@${interaction.user.id}>! You have opened a **DATA-ENTRIES** ticket.\n\n🚫 **AI Support is DISABLED** for this room. You are speaking directly with ${staffMention}.\n\nPlease provide your data entries, roster updates, or internal records below.`
-                        : `Hello <@${interaction.user.id}>! Thank you for contacting FreshlyPlaza Support.\n\n` +
+                        : `Hello <@${interaction.user.id}>! Thank you for contacting Grandway Shopping Support.\n\n` +
                           `🤖 **AI Support:** Our intelligent system is actively monitoring this ticket. If your question is standard, you will receive an immediate resolution. If specialized assistance is required, it will instantly escalate to our ${staffMention} team.\n\n` +
                           `Please explain your question or issue in detail below.`
                 )
@@ -519,7 +519,7 @@ module.exports = [
                 )
                 .setColor(catConfig.color)
                 .setTimestamp()
-                .setFooter({ text: catConfig.aiDisabled ? 'FreshlyPlaza Data Room • Human Staff Only' : 'FreshlyPlaza Ticket Suite • Use buttons below to manage', iconURL: interaction.guild.iconURL() });
+                .setFooter({ text: catConfig.aiDisabled ? 'Grandway Shopping Data Room • Human Staff Only' : 'Grandway Shopping Ticket Suite • Use buttons below to manage', iconURL: interaction.guild.iconURL() });
 
             await ticketChannel.send({
                 content: catConfig.targetUserId ? `<@${catConfig.targetUserId}>` : `<@${interaction.user.id}> <@&${targetRoleId}>`,
@@ -568,7 +568,7 @@ module.exports = [
                                  (config.ignoredUserIds || []).includes(interaction.user.id);
 
             if (!isAuthorized) {
-                return interaction.editReply({ content: '❌ Only FreshlyPlaza Staff can force open a ticket.' });
+                return interaction.editReply({ content: '❌ Only Grandway Shopping Staff can force open a ticket.' });
             }
 
             const targetUser = interaction.options.getUser('member');
@@ -646,7 +646,7 @@ module.exports = [
                 .setTitle(`🚨 Staff Direct Inquiry — Ticket #${ticketRecord.id}`)
                 .setDescription(
                     `Hello <@${targetUser.id}>,\n\n` +
-                    `A FreshlyPlaza Staff Member (<@${interaction.user.id}>) has opened this direct communication channel with you regarding:\n` +
+                    `A Grandway Shopping Staff Member (<@${interaction.user.id}>) has opened this direct communication channel with you regarding:\n` +
                     `> **${reason}**\n\n` +
                     `🚫 **AI Support is DISABLED** for this ticket. You are speaking directly with our verified Human Staff Team.\n\n` +
                     `Please review the staff member's message and respond in this channel.`
@@ -659,7 +659,7 @@ module.exports = [
                 )
                 .setColor(config.colors.warning)
                 .setTimestamp()
-                .setFooter({ text: 'FreshlyPlaza Staff Direct Channel • Human Moderation' });
+                .setFooter({ text: 'Grandway Shopping Staff Direct Channel • Human Moderation' });
 
             await ticketChannel.send({
                 content: `<@${targetUser.id}> <@${interaction.user.id}> <@&${targetRoleId}> 🔔 **DIRECT STAFF INQUIRY**`,
@@ -670,8 +670,8 @@ module.exports = [
             // Attempt friendly DM notification to user
             try {
                 const dmEmbed = new EmbedBuilder()
-                    .setTitle(`🏪 FreshlyPlaza — Direct Staff Inquiry`)
-                    .setDescription(`A FreshlyPlaza Staff Member (<@${interaction.user.id}>) has opened a direct support ticket with you in the server.\n\n**Reason:** ${reason}\n\nPlease head over to <#${ticketChannel.id}> to speak with staff.`)
+                    .setTitle(`🏪 Grandway Shopping — Direct Staff Inquiry`)
+                    .setDescription(`A Grandway Shopping Staff Member (<@${interaction.user.id}>) has opened a direct support ticket with you in the server.\n\n**Reason:** ${reason}\n\nPlease head over to <#${ticketChannel.id}> to speak with staff.`)
                     .setColor(config.colors.warning);
                 await targetUser.send({ embeds: [dmEmbed] });
             } catch (dmErr) {}
@@ -731,7 +731,7 @@ module.exports = [
 
             const isTicketCreator = ticket.user_id === interaction.user.id;
             if (!isTicketCreator && !isTicketStaff(interaction.member)) {
-                return interaction.editReply({ content: '❌ Only the ticket creator or FreshlyPlaza staff can close this ticket.' });
+                return interaction.editReply({ content: '❌ Only the ticket creator or Grandway Shopping staff can close this ticket.' });
             }
 
             const reason = interaction.options.getString('reason') || 'Resolved by staff';
@@ -785,7 +785,7 @@ module.exports = [
                 const ticketUser = await interaction.client.users.fetch(ticket.user_id);
                 if (ticketUser) {
                     const dmEmbed = new EmbedBuilder()
-                        .setTitle(`🏪 FreshlyPlaza — Ticket #${ticket.id} Closed`)
+                        .setTitle(`🏪 Grandway Shopping — Ticket #${ticket.id} Closed`)
                         .setDescription(`Your support ticket in **${config.storeName}** has been closed.\nA complete transcript has been attached for your records.`)
                         .addFields(
                             { name: 'Reason', value: reason, inline: true },
@@ -893,16 +893,16 @@ module.exports = [
 
             // Public notification in channel with clear ping before deletion
             const channelNoticeEmbed = new EmbedBuilder()
-                .setTitle('❌ FreshlyPlaza — Application Denied')
+                .setTitle('❌ Grandway Shopping — Application Denied')
                 .setDescription(
                     `Hello <@${applicantId}>,\n\n` +
-                    `Thank you for taking the time to apply to join the **FreshlyPlaza** team. After careful review by leadership, your application has been **denied** at this time.\n\n` +
+                    `Thank you for taking the time to apply to join the **Grandway Shopping** team. After careful review by leadership, your application has been **denied** at this time.\n\n` +
                     `• **Reason / Feedback:** ${reason}\n` +
                     `• **Reviewed By:** <@${interaction.user.id}>\n\n` +
                     `You are welcome to re-apply during future recruitment openings or once requirements are met. Thank you for your interest!`
                 )
                 .setColor(config.colors.danger)
-                .setFooter({ text: 'FreshlyPlaza Management Team' })
+                .setFooter({ text: 'Grandway Shopping Management Team' })
                 .setTimestamp();
 
             await interaction.channel.send({
@@ -915,10 +915,10 @@ module.exports = [
             if (applicantUser) {
                 try {
                     const dmEmbed = new EmbedBuilder()
-                        .setTitle(`💼 FreshlyPlaza — Application Status Update`)
+                        .setTitle(`💼 Grandway Shopping — Application Status Update`)
                         .setDescription(
                             `Hello **${applicantUser.username}**,\n\n` +
-                            `Thank you for applying to the **FreshlyPlaza** team.\n\n` +
+                            `Thank you for applying to the **Grandway Shopping** team.\n\n` +
                             `Following review by our management team, we regret to inform you that your application has been **denied** at this time.`
                         )
                         .addFields(
@@ -928,7 +928,7 @@ module.exports = [
                             { name: 'ℹ️ Future Applications', value: 'You are welcome to re-apply during future recruitment cycles once experience and requirements are refined.', inline: false }
                         )
                         .setColor(config.colors.danger)
-                        .setFooter({ text: 'FreshlyPlaza HR & Management' })
+                        .setFooter({ text: 'Grandway Shopping HR & Management' })
                         .setTimestamp();
 
                     await applicantUser.send({ embeds: [dmEmbed], files: transcriptAttachment ? [transcriptAttachment] : [] });
@@ -998,7 +998,7 @@ module.exports = [
                 return interaction.reply({ content: '❌ This command can only be used inside an active ticket channel.', flags: MessageFlags.Ephemeral });
             }
             if (!isTicketStaff(interaction.member)) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza staff can remove users from a ticket.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping staff can remove users from a ticket.', flags: MessageFlags.Ephemeral });
             }
 
             const targetUser = interaction.options.getUser('user');
@@ -1047,7 +1047,7 @@ module.exports = [
             .setDescription('View support ticket statistics, resolution metrics, and customer satisfaction (CSAT)'),
         async execute(interaction) {
             if (!isTicketStaff(interaction.member)) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza staff can view ticket statistics.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping staff can view ticket statistics.', flags: MessageFlags.Ephemeral });
             }
 
             const tickets = getDb().getData().tickets || [];
@@ -1068,7 +1068,7 @@ module.exports = [
             const humanHandled = closedTickets.length - aiHandled;
 
             const embed = new EmbedBuilder()
-                .setTitle('📊 FreshlyPlaza — Support Ticket Metrics')
+                .setTitle('📊 Grandway Shopping — Support Ticket Metrics')
                 .addFields(
                     { name: '🎫 Total Tickets', value: `\`${total}\``, inline: true },
                     { name: '🟢 Active Open', value: `\`${open}\``, inline: true },
@@ -1080,7 +1080,7 @@ module.exports = [
                 )
                 .setColor(config.colors.secondary)
                 .setTimestamp()
-                .setFooter({ text: 'FreshlyPlaza Support Analytics' });
+                .setFooter({ text: 'Grandway Shopping Support Analytics' });
 
             return interaction.reply({ embeds: [embed] });
         }
@@ -1089,7 +1089,7 @@ module.exports = [
         data: new SlashCommandBuilder()
             .setName('ticket-reply-anon')
             .setDescription('Send an official anonymous response to this ticket concealing your staff identity')
-            .addStringOption(opt => opt.setName('message').setDescription('Message to send as FreshlyPlaza Support').setRequired(true)),
+            .addStringOption(opt => opt.setName('message').setDescription('Message to send as Grandway Shopping Support').setRequired(true)),
         async execute(interaction) {
             const member = interaction.member;
             const isStaff = hasTicketOverride(member) || member.roles.cache.has(config.roles.staff) ||
@@ -1098,7 +1098,7 @@ module.exports = [
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can send official anonymous replies.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can send official anonymous replies.', flags: MessageFlags.Ephemeral });
             }
 
             const db = getDb();
@@ -1122,12 +1122,12 @@ module.exports = [
 
             const embed = new EmbedBuilder()
                 .setAuthor({ 
-                    name: 'FreshlyPlaza Support Team', 
+                    name: 'Grandway Shopping Support Team', 
                     iconURL: interaction.guild.iconURL() || undefined 
                 })
                 .setDescription(replyText)
                 .setColor(config.colors.secondary)
-                .setFooter({ text: 'Official FreshlyPlaza Support Response • Staff ID Protected' })
+                .setFooter({ text: 'Official Grandway Shopping Support Response • Staff ID Protected' })
                 .setTimestamp();
 
             await interaction.channel.send({ embeds: [embed] });
@@ -1163,7 +1163,7 @@ module.exports = [
                                  member.roles.cache.has(config.roles.mr);
 
             if (!isAuthorized) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza MR/HR Management can manage ticket blacklists.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping MR/HR Management can manage ticket blacklists.', flags: MessageFlags.Ephemeral });
             }
 
             const db = getDb();
@@ -1227,7 +1227,7 @@ module.exports = [
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can transfer tickets.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can transfer tickets.', flags: MessageFlags.Ephemeral });
             }
 
             const db = getDb();
@@ -1311,7 +1311,7 @@ module.exports = [
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can escalate tickets.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can escalate tickets.', flags: MessageFlags.Ephemeral });
             }
 
             const db = getDb();
@@ -1354,14 +1354,14 @@ module.exports = [
                     `• **Priority:** ⚡ \`HIGH\``
                 )
                 .setColor(config.colors.danger)
-                .setFooter({ text: 'FreshlyPlaza Leadership Escalation' })
+                .setFooter({ text: 'Grandway Shopping Leadership Escalation' })
                 .setTimestamp();
 
             // Direct Message the escalated staff member so they never miss it
             let dmDelivered = false;
             try {
                 const dmEmbed = new EmbedBuilder()
-                    .setTitle(`🚨 FreshlyPlaza — Ticket Escalation Assigned to You`)
+                    .setTitle(`🚨 Grandway Shopping — Ticket Escalation Assigned to You`)
                     .setDescription(`You have been assigned an escalated support ticket in **${interaction.guild.name}**!`)
                     .addFields(
                         { name: '📍 Channel', value: `<#${interaction.channel.id}>`, inline: true },
@@ -1399,7 +1399,7 @@ module.exports = [
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can request ticket closure.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can request ticket closure.', flags: MessageFlags.Ephemeral });
             }
 
             const db = getDb();
@@ -1411,7 +1411,7 @@ module.exports = [
             const reasonText = interaction.options.getString('reason') || 'Your inquiry appears to be resolved.';
 
             const requestEmbed = new EmbedBuilder()
-                .setTitle('🔒 FreshlyPlaza Support — Ticket Close Request')
+                .setTitle('🔒 Grandway Shopping Support — Ticket Close Request')
                 .setDescription(
                     `Hello <@${ticket.user_id}>,\n\n` +
                     `Staff member <@${interaction.user.id}> has requested to **close this support ticket**.\n\n` +
@@ -1423,7 +1423,7 @@ module.exports = [
                     { name: '❌ Keep Ticket Open', value: 'Cancels the close request so you can continue speaking with staff.', inline: true }
                 )
                 .setColor(config.colors.secondary)
-                .setFooter({ text: 'FreshlyPlaza Ticket Close Protocol' })
+                .setFooter({ text: 'Grandway Shopping Ticket Close Protocol' })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
@@ -1479,7 +1479,7 @@ module.exports = [
                                  member.roles.cache.has(config.roles.mr);
 
             if (!isAuthorized) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff Management can configure ticket settings.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff Management can configure ticket settings.', flags: MessageFlags.Ephemeral });
             }
 
             const db = getDb();
@@ -1505,7 +1505,7 @@ module.exports = [
 
             if (sub === 'status') {
                 const embed = new EmbedBuilder()
-                    .setTitle('⚙️ FreshlyPlaza Ticket System Configuration')
+                    .setTitle('⚙️ Grandway Shopping Ticket System Configuration')
                     .addFields(
                         { name: '🟢 System Status', value: settings.enabled ? '✅ Active / Open' : `⚠️ Paused (${settings.disabled_reason || 'Maintenance'})`, inline: false },
                         { name: '🕒 Staff Operating Hours', value: `\`${settings.operating_hours.start_utc}:00 UTC – ${settings.operating_hours.end_utc}:00 UTC\``, inline: true },
@@ -1513,7 +1513,7 @@ module.exports = [
                         { name: '📍 Deployed Panel Message', value: settings.panel_channel_id ? `<#${settings.panel_channel_id}> (\`${settings.panel_message_id}\`)` : '*Not deployed via command yet*', inline: false }
                     )
                     .setColor(settings.enabled ? config.colors.primary : config.colors.warning)
-                    .setFooter({ text: 'FreshlyPlaza Ticket Administration' });
+                    .setFooter({ text: 'Grandway Shopping Ticket Administration' });
 
                 if (settings.panel_image_url) {
                     embed.setImage(settings.panel_image_url);
@@ -1586,7 +1586,7 @@ module.exports = [
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can manage ticket checklists.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can manage ticket checklists.', flags: MessageFlags.Ephemeral });
             }
 
             const db = getDb();
@@ -1639,7 +1639,7 @@ module.exports = [
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can co-claim tickets.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can co-claim tickets.', flags: MessageFlags.Ephemeral });
             }
 
             const db = getDb();
@@ -1688,7 +1688,7 @@ module.exports = [
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can pin notes in tickets.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can pin notes in tickets.', flags: MessageFlags.Ephemeral });
             }
 
             const text = interaction.options.getString('text');
@@ -1728,7 +1728,7 @@ module.exports = [
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can adjust ticket priority.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can adjust ticket priority.', flags: MessageFlags.Ephemeral });
             }
 
             const level = interaction.options.getString('level');
@@ -1762,7 +1762,7 @@ module.exports = [
                             member.permissions.has(PermissionFlagsBits.ManageMessages);
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Staff can inspect ticket history.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Staff can inspect ticket history.', flags: MessageFlags.Ephemeral });
             }
 
             const targetUser = interaction.options.getUser('member');
@@ -1787,7 +1787,7 @@ module.exports = [
                 .setTitle(`📜 Ticket History: ${targetUser.username}`)
                 .setDescription(`Found **${total} total tickets** (**${openCount} currently active**).\n\n${historyText}`)
                 .setColor(config.colors.secondary)
-                .setFooter({ text: 'FreshlyPlaza Customer Support Records' })
+                .setFooter({ text: 'Grandway Shopping Customer Support Records' })
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });

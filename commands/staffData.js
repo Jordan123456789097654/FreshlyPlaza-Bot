@@ -64,7 +64,7 @@ module.exports = [
 
             if (!isStaffOrLeadership) {
                 return interaction.reply({
-                    content: '🚫 **Access Denied:** Only FreshlyPlaza Staff Leadership can inspect staff roster data.',
+                    content: '🚫 **Access Denied:** Only Grandway Shopping Staff Leadership can inspect staff roster data.',
                     flags: MessageFlags.Ephemeral
                 });
             }
@@ -162,7 +162,7 @@ module.exports = [
                         { name: '📋 Metric Breakdown', value: readiness.breakdown.join('\n'), inline: false }
                     )
                     .setColor(readiness.score >= 80 ? config.colors.primary : readiness.score >= 50 ? config.colors.warning : config.colors.danger)
-                    .setFooter({ text: 'FreshlyPlaza Leadership Succession & Promotion Engine' })
+                    .setFooter({ text: 'Grandway Shopping Leadership Succession & Promotion Engine' })
                     .setTimestamp();
 
                 return interaction.reply({ embeds: [readinessEmbed] });
@@ -203,7 +203,7 @@ module.exports = [
                 });
 
                 const deptEmbed = new EmbedBuilder()
-                    .setTitle('🏢 FreshlyPlaza Workforce — Departmental & Station Balance')
+                    .setTitle('🏢 Grandway Shopping Workforce — Departmental & Station Balance')
                     .setDescription(`Current distribution of staff across supermarket stations based on roster preferences.`)
                     .addFields(deptFields)
                     .setColor(config.colors.secondary)
@@ -255,7 +255,7 @@ module.exports = [
                         `> 🔴 **Coverage Dead-Zone:** \`04:00 – 10:00 UTC\` *(Low staff availability)*`
                     )
                     .setColor(config.colors.primary)
-                    .setFooter({ text: 'FreshlyPlaza Smart Shift Scheduler' })
+                    .setFooter({ text: 'Grandway Shopping Smart Shift Scheduler' })
                     .setTimestamp();
 
                 return interaction.reply({ embeds: [heatmapEmbed] });
@@ -305,7 +305,7 @@ module.exports = [
                 }).join('\n');
 
                 const listEmbed = new EmbedBuilder()
-                    .setTitle(`📋 FreshlyPlaza Staff Roster ${deptFilter ? `(${deptFilter})` : `(${filtered.length} Total)`}`)
+                    .setTitle(`📋 Grandway Shopping Staff Roster ${deptFilter ? `(${deptFilter})` : `(${filtered.length} Total)`}`)
                     .setDescription(listText + (filtered.length > 20 ? `\n\n*...and ${filtered.length - 20} more profiles.*` : ''))
                     .setColor(config.colors.secondary)
                     .setFooter({ text: `Total Indexed: ${filtered.length} Staff Members` })
@@ -346,7 +346,7 @@ module.exports = [
                 const tzLines = Object.entries(tzCounts).slice(0, 8).map(([t, c]) => `• **${t}:** \`${c}\` staff`).join('\n') || '*None*';
 
                 const summaryEmbed = new EmbedBuilder()
-                    .setTitle('📊 FreshlyPlaza Staff Roster Analytics & Overview')
+                    .setTitle('📊 Grandway Shopping Staff Roster Analytics & Overview')
                     .setDescription(`Comprehensive workforce data compiled from automated \`DATA-ENTRIES\` submissions.`)
                     .addFields(
                         { name: '👥 Total Staff Profiles Indexed', value: `\`${total}\` registered staff members`, inline: false },
@@ -359,7 +359,7 @@ module.exports = [
                         }
                     )
                     .setColor(config.colors.primary)
-                    .setFooter({ text: 'FreshlyPlaza Workforce Management Analytics' })
+                    .setFooter({ text: 'Grandway Shopping Workforce Management Analytics' })
                     .setTimestamp();
 
                 return interaction.reply({ embeds: [summaryEmbed] });
@@ -378,7 +378,7 @@ module.exports = [
 
                 if (!isManagement) {
                     return interaction.reply({
-                        content: '❌ Only FreshlyPlaza Leadership / HR can run the staff data entry audit.',
+                        content: '❌ Only Grandway Shopping Leadership / HR can run the staff data entry audit.',
                         flags: MessageFlags.Ephemeral
                     });
                 }
@@ -406,7 +406,7 @@ module.exports = [
                         }
                     )
                     .setColor(result.missingCount > 0 ? config.colors.warning : config.colors.primary)
-                    .setFooter({ text: 'FreshlyPlaza Workforce Management' })
+                    .setFooter({ text: 'Grandway Shopping Workforce Management' })
                     .setTimestamp();
 
                 if (result.missingStaff.length > 0) {

@@ -80,7 +80,7 @@ module.exports = [
                     }
                 )
                 .setColor(config.colors.secondary)
-                .setFooter({ text: `Hosted by ${interaction.user.username} • FreshlyPlaza Mini-Games` })
+                .setFooter({ text: `Hosted by ${interaction.user.username} • Grandway Shopping Mini-Games` })
                 .setTimestamp();
 
             const actionRow = new ActionRowBuilder().addComponents(
@@ -151,7 +151,7 @@ module.exports = [
                         { name: '🏆 Reward', value: `${result.game.prize || '1 Win added to `/gtn-leaderboard`'}`, inline: true }
                     )
                     .setColor(config.colors.primary)
-                    .setFooter({ text: 'FreshlyPlaza Mini-Games • Run /gtn-start to play again!' })
+                    .setFooter({ text: 'Grandway Shopping Mini-Games • Run /gtn-start to play again!' })
                     .setTimestamp();
 
                 return interaction.reply({ content: `🎊 <@${interaction.user.id}> guessed correctly!`, embeds: [winEmbed] });
@@ -212,7 +212,7 @@ module.exports = [
                     { name: '🛑 Ended By', value: `<@${interaction.user.id}>`, inline: true }
                 )
                 .setColor(config.colors.danger)
-                .setFooter({ text: 'FreshlyPlaza Mini-Games' })
+                .setFooter({ text: 'Grandway Shopping Mini-Games' })
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed] });
@@ -286,7 +286,7 @@ module.exports = [
                 .setDescription(
                     `<@${interaction.user.id}> has requested a clue for the active Guess The Number game!\n\n` +
                     `🛡️ **Staff Approval Required:**\n` +
-                    `A FreshlyPlaza Staff Member (MR/HR) or the Game Host (<@${game.hostId}>) must approve this request before the hint is posted.`
+                    `A Grandway Shopping Staff Member (MR/HR) or the Game Host (<@${game.hostId}>) must approve this request before the hint is posted.`
                 )
                 .addFields(
                     { name: '🔢 Game Range', value: `\`${game.min}\` ➔ \`${game.max}\``, inline: true },
@@ -294,7 +294,7 @@ module.exports = [
                     { name: '👤 Requester', value: `<@${interaction.user.id}>`, inline: true }
                 )
                 .setColor(config.colors.warning)
-                .setFooter({ text: 'FreshlyPlaza Staff Moderation' })
+                .setFooter({ text: 'Grandway Shopping Staff Moderation' })
                 .setTimestamp();
 
             await interaction.channel.send({ embeds: [reviewEmbed], components: [hintApprovalRow] });
@@ -304,14 +304,14 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('gtn-leaderboard')
-            .setDescription('View the Top Guess The Number Champions at FreshlyPlaza'),
+            .setDescription('View the Top Guess The Number Champions at Grandway Shopping'),
         async execute(interaction) {
             const db = getDb();
             const topPlayers = await db.getGtnLeaderboard(10);
 
             const embed = new EmbedBuilder()
-                .setTitle('🏆 FreshlyPlaza — Guess The Number Leaderboard')
-                .setDescription('The master number-crackers of the FreshlyPlaza community!')
+                .setTitle('🏆 Grandway Shopping — Guess The Number Leaderboard')
+                .setDescription('The master number-crackers of the Grandway Shopping community!')
                 .setColor(config.colors.primary)
                 .setTimestamp();
 
@@ -357,7 +357,7 @@ module.exports = [
                     { name: '🕒 Last Victory', value: stats.last_win ? `<t:${Math.floor(new Date(stats.last_win).getTime() / 1000)}:R>` : '`None yet`', inline: true }
                 )
                 .setColor(stats.wins > 0 ? config.colors.primary : config.colors.neutral)
-                .setFooter({ text: 'FreshlyPlaza Mini-Games' })
+                .setFooter({ text: 'Grandway Shopping Mini-Games' })
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed] });

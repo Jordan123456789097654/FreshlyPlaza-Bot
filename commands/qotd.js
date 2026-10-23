@@ -11,7 +11,7 @@ module.exports = [
             const question = interaction.options.getString('question');
 
             const embed = new EmbedBuilder()
-                .setTitle('❓ FreshlyPlaza — Question of the Day (QOTD)')
+                .setTitle('❓ Grandway Shopping — Question of the Day (QOTD)')
                 .setDescription(`**${question}**\n\n*Reply in this channel or in the discussion thread below to share your thoughts!*`)
                 .setColor(config.colors.secondary)
                 .setTimestamp();

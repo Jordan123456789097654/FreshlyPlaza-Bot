@@ -148,7 +148,7 @@ module.exports = [
             }).slice(0, 10);
 
             const embed = new EmbedBuilder()
-                .setTitle('🏆 FreshlyPlaza — Top Staff Activity Leaderboard')
+                .setTitle('🏆 Grandway Shopping — Top Staff Activity Leaderboard')
                 .setColor(config.colors.secondary)
                 .setTimestamp();
 
@@ -198,7 +198,7 @@ module.exports = [
                 .setTitle(`📈 Staff Quota & Promotion Check — ${target.username}`)
                 .setThumbnail(target.displayAvatarURL())
                 .setDescription(
-                    `Review your current shift activity progress toward your next staff promotion at **FreshlyPlaza**.`
+                    `Review your current shift activity progress toward your next staff promotion at **Grandway Shopping**.`
                 )
                 .addFields(
                     { name: '🛒 Shifts Attended', value: `**${shiftsAttended}** shifts`, inline: true },
@@ -211,7 +211,7 @@ module.exports = [
                     }
                 )
                 .setColor(isEligible ? config.colors.primary : config.colors.secondary)
-                .setFooter({ text: 'FreshlyPlaza Human Resources & Promotions' })
+                .setFooter({ text: 'Grandway Shopping Human Resources & Promotions' })
                 .setTimestamp();
 
             if (isEligible) {
@@ -230,7 +230,7 @@ module.exports = [
                     },
                     {
                         name: '💬 Ticket Copy-Paste Prompt',
-                        value: `\`\`\`Hello Management, I have completed my promotion quota on FreshlyPlaza (Shifts Completed: ${totalShifts}/${requiredShifts}). I would like to request my promotion review. My Discord ID is ${target.id}.\`\`\``
+                        value: `\`\`\`Hello Management, I have completed my promotion quota on Grandway Shopping (Shifts Completed: ${totalShifts}/${requiredShifts}). I would like to request my promotion review. My Discord ID is ${target.id}.\`\`\``
                     }
                 );
             } else {
@@ -249,7 +249,7 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('hire')
-            .setDescription('Hire a user to the FreshlyPlaza staff team, initializing records and dispatching announcements')
+            .setDescription('Hire a user to the Grandway Shopping staff team, initializing records and dispatching announcements')
             .addRoleOption(opt => 
                 opt.setName('role')
                     .setDescription('The role they were hired as')
@@ -285,7 +285,7 @@ module.exports = [
 
             if (!isAuthorized) {
                 return interaction.reply({
-                    content: '❌ Only FreshlyPlaza HR and Management can hire staff members.',
+                    content: '❌ Only Grandway Shopping HR and Management can hire staff members.',
                     ephemeral: true
                 });
             }
@@ -335,7 +335,7 @@ module.exports = [
             let dmSent = true;
             try {
                 const dmEmbed = new EmbedBuilder()
-                    .setTitle('🎉 FreshlyPlaza — Application Accepted & Hired!')
+                    .setTitle('🎉 Grandway Shopping — Application Accepted & Hired!')
                     .setDescription(
                         `Congratulations **${targetUser.username}**!\n\n` +
                         `We are thrilled to inform you that your application has been **ACCEPTED** and you have officially been hired to the **${config.storeName} Staff Team**!\n\n` +
@@ -349,7 +349,7 @@ module.exports = [
                     .setColor(config.colors.primary)
                     .setThumbnail(interaction.guild.iconURL({ dynamic: true }) || undefined)
                     .setTimestamp()
-                    .setFooter({ text: 'FreshlyPlaza Human Resources Department' });
+                    .setFooter({ text: 'Grandway Shopping Human Resources Department' });
 
                 if (mentorUser) {
                     dmEmbed.addFields({
@@ -392,7 +392,7 @@ module.exports = [
             if (mentorUser && mentorUser.id !== targetUser.id) {
                 try {
                     const mentorDmEmbed = new EmbedBuilder()
-                        .setTitle('👥 FreshlyPlaza — Mentorship Assignment')
+                        .setTitle('👥 Grandway Shopping — Mentorship Assignment')
                         .setDescription(
                             `Hello <@${mentorUser.id}>!\n\n` +
                             `You have been assigned as the official colleague mentor for our newest team member, **<@${targetUser.id}>** (\`${targetUser.username}\`), hired as <@&${hiredRole.id}>.\n\n` +
@@ -412,9 +412,9 @@ module.exports = [
                 const announceCh = interaction.guild.channels.cache.get(announcementsChId) || await interaction.guild.channels.fetch(announcementsChId).catch(() => null);
                 if (announceCh) {
                     const publicWelcomeEmbed = new EmbedBuilder()
-                        .setTitle('🎉 New Colleague Hired — Welcome to FreshlyPlaza!')
+                        .setTitle('🎉 New Colleague Hired — Welcome to Grandway Shopping!')
                         .setDescription(
-                            `Please give a warm welcome to our newest colleague, <@${targetUser.id}>, who has officially joined the **FreshlyPlaza Staff Team**!\n\n` +
+                            `Please give a warm welcome to our newest colleague, <@${targetUser.id}>, who has officially joined the **Grandway Shopping Staff Team**!\n\n` +
                             `• **Role:** <@&${hiredRole.id}>\n` +
                             `• **Hired By:** <@${interaction.user.id}>\n` +
                             (mentorUser ? `• **Assigned Mentor:** <@${mentorUser.id}>\n` : '') +
@@ -423,7 +423,7 @@ module.exports = [
                         )
                         .setColor(config.colors.primary)
                         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-                        .setFooter({ text: 'FreshlyPlaza Staff Human Resources' })
+                        .setFooter({ text: 'Grandway Shopping Staff Human Resources' })
                         .setTimestamp();
 
                     await announceCh.send({ content: `<@&${config.roles.staff}> 🎉 **NEW TEAM MEMBER WELCOME**`, embeds: [publicWelcomeEmbed] });
@@ -434,7 +434,7 @@ module.exports = [
             const hireEmbed = new EmbedBuilder()
                 .setTitle('🎉 Staff Member Hired!')
                 .setDescription(
-                    `Welcome <@${targetUser.id}> to the **FreshlyPlaza** staff team!\n\n` +
+                    `Welcome <@${targetUser.id}> to the **Grandway Shopping** staff team!\n\n` +
                     `• **Assigned Role:** <@&${hiredRole.id}>\n` +
                     `• **Staff Role:** <@&${config.roles.staff}>\n` +
                     `• **Hired By:** <@${interaction.user.id}>\n` +
@@ -446,7 +446,7 @@ module.exports = [
                 .setColor(config.colors.primary)
                 .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
                 .setTimestamp()
-                .setFooter({ text: 'FreshlyPlaza Staff Management' });
+                .setFooter({ text: 'Grandway Shopping Staff Management' });
 
             if (notes) {
                 hireEmbed.addFields({ name: '📝 HR Notes', value: notes, inline: false });

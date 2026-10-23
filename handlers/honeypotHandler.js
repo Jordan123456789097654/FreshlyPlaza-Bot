@@ -50,7 +50,7 @@ async function handleHoneypotMessage(message) {
         // Action 4: Log to #modlogs and #punishment-logs
         const alertEmbed = new EmbedBuilder()
             .setTitle('🚨 SECURITY ALERT — HONEYPOT TRIGGERED')
-            .setDescription(`A user triggered the **FreshlyPlaza Security Trap Channel** (<#${config.channels.honeypot}>) and has been automatically moderated.`)
+            .setDescription(`A user triggered the **Grandway Shopping Security Trap Channel** (<#${config.channels.honeypot}>) and has been automatically moderated.`)
             .addFields(
                 { name: '👤 Offender', value: `<@${message.author.id}> (${message.author.tag})`, inline: true },
                 { name: '🆔 User ID', value: message.author.id, inline: true },
@@ -59,7 +59,7 @@ async function handleHoneypotMessage(message) {
             )
             .setColor(config.colors.danger)
             .setTimestamp()
-            .setFooter({ text: 'FreshlyPlaza Anti-Raid System', iconURL: message.guild.iconURL() });
+            .setFooter({ text: 'Grandway Shopping Anti-Raid System', iconURL: message.guild.iconURL() });
 
         const modLogsChannel = message.guild.channels.cache.get(config.channels.modLogs);
         if (modLogsChannel) {

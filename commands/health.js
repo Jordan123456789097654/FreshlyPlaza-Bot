@@ -35,9 +35,9 @@ module.exports = [
             }
 
             const embed = new EmbedBuilder()
-                .setTitle(`🩺 FreshlyPlaza Bot — Real-Time Health & Status`)
+                .setTitle(`🩺 Grandway Shopping Bot — Real-Time Health & Status`)
                 .setDescription(
-                    `Current real-time operational status monitored by the FreshlyPlaza website system health pinger.`
+                    `Current real-time operational status monitored by the Grandway Shopping website system health pinger.`
                 )
                 .addFields(
                     { name: '🟢 Current Status', value: `**${statusIcon} ${metrics.status}**`, inline: true },
@@ -48,7 +48,7 @@ module.exports = [
                     { name: '🛡️ Guilds & Commands', value: `\`${interaction.client.guilds.cache.size} Servers\` • \`${interaction.client.commands.size} Commands\``, inline: true }
                 )
                 .setColor(color)
-                .setFooter({ text: 'FreshlyPlaza Real-Time Diagnostics' })
+                .setFooter({ text: 'Grandway Shopping Real-Time Diagnostics' })
                 .setTimestamp();
 
             if (metrics.reason) {
@@ -170,7 +170,7 @@ module.exports = [
                     { name: '🌐 Live Website Endpoint', value: '[`http://fi14.bot-hosting.cloud:26134/health`](http://fi14.bot-hosting.cloud:26134/health)', inline: false }
                 )
                 .setColor(color)
-                .setFooter({ text: 'FreshlyPlaza Bot Health Management' })
+                .setFooter({ text: 'Grandway Shopping Bot Health Management' })
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed] });

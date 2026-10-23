@@ -122,12 +122,12 @@ module.exports = {
                         }
                     )
                     .setColor(0xE74C3C)
-                    .setFooter({ text: 'FreshlyPlaza Internal Affairs Division • Case Surveillance Protocol' })
+                    .setFooter({ text: 'Grandway Shopping Internal Affairs Division • Case Surveillance Protocol' })
                     .setTimestamp();
 
                 // Send public notice into the voice channel's text chat
                 await channel.send({
-                    content: `🔴 **[INTERNAL AFFAIRS COMPLIANCE NOTICE]**\nYour voice is being recorded for official Internal Affairs investigation Docket **\`${session.id}\`**. By continuing to remain in this voice channel, you consent to FreshlyPlaza Trust & Safety audio monitoring policies. If you do not consent, you must disconnect immediately.`
+                    content: `🔴 **[INTERNAL AFFAIRS COMPLIANCE NOTICE]**\nYour voice is being recorded for official Internal Affairs investigation Docket **\`${session.id}\`**. By continuing to remain in this voice channel, you consent to Grandway Shopping Trust & Safety audio monitoring policies. If you do not consent, you must disconnect immediately.`
                 }).catch(() => {});
 
                 const row = new ActionRowBuilder().addComponents(
@@ -173,7 +173,7 @@ module.exports = {
                         { name: '📅 Expiration Date', value: `<t:${Math.floor(new Date(record.expires_at).getTime() / 1000)}:R> (30 Days)`, inline: true }
                     )
                     .setColor(0x2ECC71)
-                    .setFooter({ text: 'FreshlyPlaza Internal Affairs Vault' })
+                    .setFooter({ text: 'Grandway Shopping Internal Affairs Vault' })
                     .setTimestamp();
 
                 // Also log to the Trust & Safety server's wiretap channel if accessible

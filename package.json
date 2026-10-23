@@ -1,7 +1,7 @@
 {
-  "name": "freshlyplaza-discord-bot",
+  "name": "grandway-shopping-bot",
   "version": "1.0.0",
-  "description": "Discord Bot for Roblox Grocery Store FreshlyPlaza",
+  "description": "Discord Bot for Roblox Store Grandway Shopping",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

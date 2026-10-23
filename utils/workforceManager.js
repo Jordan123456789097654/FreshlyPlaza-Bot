@@ -50,7 +50,7 @@ async function triggerHostingReminder(client, isManual = false) {
     const pings = eligibleHosts.map(h => `<@${h.user_id}>`).join(' ');
 
     const reminderEmbed = new EmbedBuilder()
-        .setTitle('🏪 FreshlyPlaza Staff Operations — Shift & Training Hosting Callout')
+        .setTitle('🏪 Grandway Shopping Staff Operations — Shift & Training Hosting Callout')
         .setDescription(
             `📢 **Attention Certified Shift Hosts & Trainers:**\n\n` +
             `This is your scheduled roster reminder for all staff members who expressed availability to host **Store Shifts** and **Trainee Training Sessions**!\n\n` +
@@ -59,15 +59,15 @@ async function triggerHostingReminder(client, isManual = false) {
             `🎓 **Host a Session Today:**\n` +
             `• **Store Shifts:** Schedule in <#${config.channels.shifts}> or start a vote via \`/shift-vote\`\n` +
             `• **Training Sessions:** Open a session in <#${config.channels.trainingSessions}> for waiting Trainees\n\n` +
-            `*Thank you for keeping FreshlyPlaza active and operating at peak quality!*`
+            `*Thank you for keeping Grandway Shopping active and operating at peak quality!*`
         )
         .addFields(
             { name: '👥 Scheduled Callout List', value: pings.length > 1024 ? `${eligibleHosts.length} Active Hosts Pinged` : pings, inline: false },
-            { name: '📅 Reminder Cadence', value: '`Recurring every 3 days` • *FreshlyPlaza Operations*', inline: true }
+            { name: '📅 Reminder Cadence', value: '`Recurring every 3 days` • *Grandway Shopping Operations*', inline: true }
         )
         .setColor(config.colors.primary)
         .setThumbnail('https://cdn.discordapp.com/icons/1504761883566280735/f0e44faaa0b623912fc3cb3935511dd0.webp')
-        .setFooter({ text: 'FreshlyPlaza Operations • Automated Workforce Dispatcher' })
+        .setFooter({ text: 'Grandway Shopping Operations • Automated Workforce Dispatcher' })
         .setTimestamp();
 
     await targetChannel.send({
@@ -201,7 +201,7 @@ async function dispatchStaffDataAuditAndDms(guild, actionedByUserId) {
 
     const templateText = 
 `\`\`\`text
-=== FRESHLYPLAZA STAFF DATA ENTRY ===
+=== GRANDWAY SHOPPING STAFF DATA ENTRY ===
 Preferred Name / Nickname: 
 Roblox Username: 
 Roblox Profile ID: 
@@ -255,10 +255,10 @@ Additional Notes:
         const timeframeStr = isLoa ? '3 months (90 days)' : '1 week (7 days)';
 
         const dmEmbed = new EmbedBuilder()
-            .setTitle('⚠️ FreshlyPlaza — Mandatory Staff Data Entry Notice')
+            .setTitle('⚠️ Grandway Shopping — Mandatory Staff Data Entry Notice')
             .setDescription(
                 `Hello <@${member.id}>,\n\n` +
-                `Our leadership team has initiated a mandatory staff roster synchronization for all active and LOA colleagues at **FreshlyPlaza**.\n\n` +
+                `Our leadership team has initiated a mandatory staff roster synchronization for all active and LOA colleagues at **Grandway Shopping**.\n\n` +
                 `You currently do not have a completed roster profile on file in our database.`
             )
             .addFields(
@@ -269,7 +269,7 @@ Additional Notes:
                 },
                 {
                     name: '🚨 Termination Warning (Policy Enforcement)',
-                    value: `Failure to submit your data entry before the deadline will result in **immediate termination of your staff position and removal of all staff roles** from FreshlyPlaza.`,
+                    value: `Failure to submit your data entry before the deadline will result in **immediate termination of your staff position and removal of all staff roles** from Grandway Shopping.`,
                     inline: false
                 },
                 {
@@ -288,7 +288,7 @@ Additional Notes:
                 }
             )
             .setColor(isLoa ? config.colors.warning : config.colors.danger)
-            .setFooter({ text: 'FreshlyPlaza High Rank Management Team', iconURL: guild.iconURL() })
+            .setFooter({ text: 'Grandway Shopping High Rank Management Team', iconURL: guild.iconURL() })
             .setTimestamp();
 
         try {
@@ -373,10 +373,10 @@ async function checkOverdueStaffDataNotices(client) {
 
             // Send DM to terminated user
             const termDm = new EmbedBuilder()
-                .setTitle('🚨 FreshlyPlaza — Notice of Staff Termination')
+                .setTitle('🚨 Grandway Shopping — Notice of Staff Termination')
                 .setDescription(
                     `Hello <@${member.id}>,\n\n` +
-                    `Your staff position at **FreshlyPlaza** has been **terminated** due to failure to submit the mandatory Staff Data Entry within your allocated deadline of **${record.duration_days} days**.\n\n` +
+                    `Your staff position at **Grandway Shopping** has been **terminated** due to failure to submit the mandatory Staff Data Entry within your allocated deadline of **${record.duration_days} days**.\n\n` +
                     `Your staff roles have been automatically removed from the server.`
                 )
                 .addFields(
@@ -385,7 +385,7 @@ async function checkOverdueStaffDataNotices(client) {
                     { name: '⚖️ Appeal Window', value: `You may submit an appeal to HR within 30 days if you experienced unavoidable circumstances.`, inline: false }
                 )
                 .setColor(config.colors.danger)
-                .setFooter({ text: 'FreshlyPlaza Automated Workforce Enforcement' })
+                .setFooter({ text: 'Grandway Shopping Automated Workforce Enforcement' })
                 .setTimestamp();
 
             await member.send({ embeds: [termDm] }).catch(() => {});
@@ -403,7 +403,7 @@ async function checkOverdueStaffDataNotices(client) {
                         { name: '🛡️ Preserved Roles', value: `${preservedRoleIds.length} roles logged in DB for appeal`, inline: true }
                     )
                     .setColor(config.colors.danger)
-                    .setFooter({ text: 'FreshlyPlaza SLA Auto-Term' })
+                    .setFooter({ text: 'Grandway Shopping SLA Auto-Term' })
                     .setTimestamp();
 
                 await logChannel.send({ embeds: [logEmbed] }).catch(() => {});

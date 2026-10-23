@@ -246,7 +246,7 @@ async function handleGtnMessage(message) {
         const winEmbed = new EmbedBuilder()
             .setTitle('🎉 WINNER! The Number Has Been Guessed!')
             .setDescription(
-                `Congratulations to <@${message.author.id}> for cracking the FreshlyPlaza secret number!`
+                `Congratulations to <@${message.author.id}> for cracking the Grandway Shopping secret number!`
             )
             .setThumbnail(message.author.displayAvatarURL())
             .addFields(
@@ -258,7 +258,7 @@ async function handleGtnMessage(message) {
                 { name: '🏆 Reward', value: `${result.game.prize || '1 Win added to `/gtn-leaderboard`'}`, inline: true }
             )
             .setColor(config.colors.primary)
-            .setFooter({ text: 'FreshlyPlaza Mini-Games • Run /gtn-start to play again!' })
+            .setFooter({ text: 'Grandway Shopping Mini-Games • Run /gtn-start to play again!' })
             .setTimestamp();
 
         return message.channel.send({ content: `🎊 <@${message.author.id}> has won **Guess The Number**!`, embeds: [winEmbed] });
@@ -331,7 +331,7 @@ async function handleGtnButton(interaction) {
             .setDescription(
                 `<@${interaction.user.id}> has requested a clue for the ongoing Guess The Number game!\n\n` +
                 `🛡️ **Staff Review Required:**\n` +
-                `A FreshlyPlaza Staff Member (MR/HR) or the Game Host (<@${game.hostId}>) must approve this request before the hint is posted.`
+                `A Grandway Shopping Staff Member (MR/HR) or the Game Host (<@${game.hostId}>) must approve this request before the hint is posted.`
             )
             .addFields(
                 { name: '🔢 Game Range', value: `\`${game.min}\` ➔ \`${game.max}\``, inline: true },
@@ -339,7 +339,7 @@ async function handleGtnButton(interaction) {
                 { name: '👤 Requester', value: `<@${interaction.user.id}>`, inline: true }
             )
             .setColor(config.colors.warning)
-            .setFooter({ text: 'FreshlyPlaza Staff Moderation' })
+            .setFooter({ text: 'Grandway Shopping Staff Moderation' })
             .setTimestamp();
 
         await interaction.channel.send({ embeds: [reviewEmbed], components: [hintApprovalRow] });
@@ -354,7 +354,7 @@ async function handleGtnButton(interaction) {
 
         const isAuth = isStaffMember(interaction.member, game.hostId);
         if (!isAuth) {
-            return interaction.reply({ content: '❌ Only FreshlyPlaza Staff (MR/HR) or the Game Host can approve hint requests.', ephemeral: true });
+            return interaction.reply({ content: '❌ Only Grandway Shopping Staff (MR/HR) or the Game Host can approve hint requests.', ephemeral: true });
         }
 
         const approval = approveHint(channelId, interaction.user.id);
@@ -373,7 +373,7 @@ async function handleGtnButton(interaction) {
                 { name: '📊 Guesses So Far', value: `**${game.guessesCount}** attempts`, inline: true }
             )
             .setColor(config.colors.primary)
-            .setFooter({ text: `FreshlyPlaza Clue #${game.hintsGiven}` })
+            .setFooter({ text: `Grandway Shopping Clue #${game.hintsGiven}` })
             .setTimestamp();
 
         return interaction.update({ embeds: [approvedEmbed], components: [] });
@@ -387,7 +387,7 @@ async function handleGtnButton(interaction) {
 
         const isAuth = isStaffMember(interaction.member, game.hostId);
         if (!isAuth) {
-            return interaction.reply({ content: '❌ Only FreshlyPlaza Staff (MR/HR) or the Game Host can deny hint requests.', ephemeral: true });
+            return interaction.reply({ content: '❌ Only Grandway Shopping Staff (MR/HR) or the Game Host can deny hint requests.', ephemeral: true });
         }
 
         const denial = denyHint(channelId, interaction.user.id);
@@ -455,7 +455,7 @@ async function handleGtnButton(interaction) {
                 { name: '📊 Total Guesses Made', value: `**${endedGame.guessesCount}** attempts`, inline: true }
             )
             .setColor(config.colors.danger)
-            .setFooter({ text: 'FreshlyPlaza Mini-Games' })
+            .setFooter({ text: 'Grandway Shopping Mini-Games' })
             .setTimestamp();
 
         await interaction.channel.send({ embeds: [embed] });

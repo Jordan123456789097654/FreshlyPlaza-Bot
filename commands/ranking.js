@@ -68,7 +68,7 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('rank')
-            .setDescription('Set a player\'s rank in the FreshlyPlaza Roblox group')
+            .setDescription('Set a player\'s rank in the Grandway Shopping Roblox group')
             .addStringOption(opt => 
                 opt.setName('role')
                    .setDescription('Name or Rank Number of the group role to assign')
@@ -86,7 +86,7 @@ module.exports = [
             ),
         async execute(interaction) {
             if (!checkManagerPerms(interaction.member)) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Leadership / HR can rank members.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Leadership / HR can rank members.', flags: MessageFlags.Ephemeral });
             }
 
             await interaction.deferReply();
@@ -108,7 +108,7 @@ module.exports = [
             );
 
             if (!matchedRole) {
-                return interaction.editReply({ content: `❌ Group role \`${roleInput}\` not found in FreshlyPlaza group.` });
+                return interaction.editReply({ content: `❌ Group role \`${roleInput}\` not found in Grandway Shopping group.` });
             }
 
             // Rank safety cap: Don't allow bot to rank to Founder or Executive Director (rank >= 253)
@@ -134,7 +134,7 @@ module.exports = [
                 )
                 .setColor(config.colors.primary)
                 .setTimestamp()
-                .setFooter({ text: 'FreshlyPlaza Automated Group Management' });
+                .setFooter({ text: 'Grandway Shopping Automated Group Management' });
 
             const logChId = config.channels.demoteLogs || config.channels.ticketLogs;
             const logCh = interaction.guild.channels.cache.get(logChId);
@@ -148,12 +148,12 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('promote')
-            .setDescription('Promote a player to the next higher rank in the FreshlyPlaza Roblox group')
+            .setDescription('Promote a player to the next higher rank in the Grandway Shopping Roblox group')
             .addUserOption(opt => opt.setName('discord_user').setDescription('Target Discord user (if verified)').setRequired(false))
             .addStringOption(opt => opt.setName('roblox_username').setDescription('Target Roblox username or ID').setRequired(false)),
         async execute(interaction) {
             if (!checkManagerPerms(interaction.member)) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Leadership / HR can promote members.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Leadership / HR can promote members.', flags: MessageFlags.Ephemeral });
             }
 
             await interaction.deferReply();
@@ -185,12 +185,12 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('demote')
-            .setDescription('Demote a player to the lower rank in the FreshlyPlaza Roblox group')
+            .setDescription('Demote a player to the lower rank in the Grandway Shopping Roblox group')
             .addUserOption(opt => opt.setName('discord_user').setDescription('Target Discord user (if verified)').setRequired(false))
             .addStringOption(opt => opt.setName('roblox_username').setDescription('Target Roblox username or ID').setRequired(false)),
         async execute(interaction) {
             if (!checkManagerPerms(interaction.member)) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Leadership / HR can demote members.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Leadership / HR can demote members.', flags: MessageFlags.Ephemeral });
             }
 
             await interaction.deferReply();
@@ -222,13 +222,13 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('exile')
-            .setDescription('Exile/kick a member from the FreshlyPlaza Roblox group')
+            .setDescription('Exile/kick a member from the Grandway Shopping Roblox group')
             .addUserOption(opt => opt.setName('discord_user').setDescription('Target Discord user (if verified)').setRequired(false))
             .addStringOption(opt => opt.setName('roblox_username').setDescription('Target Roblox username or ID').setRequired(false))
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for exile').setRequired(false)),
         async execute(interaction) {
             if (!checkManagerPerms(interaction.member)) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Leadership / HR can exile members.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Leadership / HR can exile members.', flags: MessageFlags.Ephemeral });
             }
 
             await interaction.deferReply();
@@ -240,7 +240,7 @@ module.exports = [
 
             const currentRole = await RobloxManager.getUserRankInGroup(target.id);
             if (!currentRole) {
-                return interaction.editReply({ content: `❌ **${target.name}** is not in the FreshlyPlaza Roblox group.` });
+                return interaction.editReply({ content: `❌ **${target.name}** is not in the Grandway Shopping Roblox group.` });
             }
 
             const res = await RobloxManager.exileUser(target.id);
@@ -271,7 +271,7 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('shout')
-            .setDescription('Post an official announcement shout to the FreshlyPlaza Roblox group')
+            .setDescription('Post an official announcement shout to the Grandway Shopping Roblox group')
             .addStringOption(opt => 
                 opt.setName('message')
                    .setDescription('Shout text to post (leave empty or type "clear" to clear the shout)')
@@ -279,7 +279,7 @@ module.exports = [
             ),
         async execute(interaction) {
             if (!checkManagerPerms(interaction.member)) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Leadership can update the Roblox group shout.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Leadership can update the Roblox group shout.', flags: MessageFlags.Ephemeral });
             }
 
             await interaction.deferReply();
@@ -310,7 +310,7 @@ module.exports = [
             .addIntegerOption(opt => opt.setName('limit').setDescription('Number of entries to fetch (Max 20, default 10)').setRequired(false)),
         async execute(interaction) {
             if (!checkManagerPerms(interaction.member)) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Leadership can inspect group audit logs.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Leadership can inspect group audit logs.', flags: MessageFlags.Ephemeral });
             }
 
             await interaction.deferReply();
@@ -333,7 +333,7 @@ module.exports = [
                 .setTitle(`📋 Roblox Group Audit Log (Latest ${logs.length})`)
                 .setDescription(lines.join('\n').slice(0, 4000))
                 .setColor(config.colors.secondary)
-                .setFooter({ text: 'FreshlyPlaza Security & Audit Feed' })
+                .setFooter({ text: 'Grandway Shopping Security & Audit Feed' })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -390,7 +390,7 @@ module.exports = [
             const groupRole = await RobloxManager.getUserRankInGroup(target.id);
             if (!groupRole) {
                 return interaction.editReply({
-                    content: `❌ **${target.name}** is not currently in the FreshlyPlaza Roblox group.`
+                    content: `❌ **${target.name}** is not currently in the Grandway Shopping Roblox group.`
                 });
             }
 
@@ -443,25 +443,25 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('game-stats')
-            .setDescription('View live player count, visits, and details for the FreshlyPlaza Roblox game'),
+            .setDescription('View live player count, visits, and details for the Grandway Shopping Roblox game'),
         async execute(interaction) {
             await interaction.deferReply();
             const groupInfo = await RobloxManager.getGroupInfo();
             const gameStats = await RobloxManager.getGameStats();
 
             const embed = new EmbedBuilder()
-                .setTitle('🛒 FreshlyPlaza — Live Game & Group Intelligence')
+                .setTitle('🛒 Grandway Shopping — Live Game & Group Intelligence')
                 .setURL(config.robloxGameLink)
-                .setDescription('Real-time operational status for FreshlyPlaza Supermarket.')
+                .setDescription('Real-time operational status for Grandway Shopping Supermarket.')
                 .addFields(
                     { name: '👥 Group Members', value: `**${groupInfo ? groupInfo.memberCount : '70+'}** members`, inline: true },
                     { name: '🎮 In-Game Players', value: `**${gameStats ? (gameStats.playing || 0) : 0}** shoppers live`, inline: true },
                     { name: '🌐 Total Visits', value: `**${gameStats ? (gameStats.visits || 'N/A') : 'N/A'}**`, inline: true },
-                    { name: '🏪 Experience Link', value: `[Play FreshlyPlaza on Roblox](${config.robloxGameLink})`, inline: false },
+                    { name: '🏪 Experience Link', value: `[Play Grandway Shopping on Roblox](${config.robloxGameLink})`, inline: false },
                     { name: '📢 Group Shout', value: groupInfo?.shout?.body ? `\`\`\`${groupInfo.shout.body}\`\`\`` : '*No active shout*', inline: false }
                 )
                 .setColor(config.colors.primary)
-                .setFooter({ text: 'FreshlyPlaza Roblox Integration' })
+                .setFooter({ text: 'Grandway Shopping Roblox Integration' })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -472,7 +472,7 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('roblox-roles')
-            .setDescription('View all available ranks & roles in the FreshlyPlaza Roblox group'),
+            .setDescription('View all available ranks & roles in the Grandway Shopping Roblox group'),
         async execute(interaction) {
             await interaction.deferReply();
             const roles = await RobloxManager.getGroupRoles();
@@ -491,8 +491,8 @@ module.exports = [
             const formatRoles = (arr) => arr.map(r => `• \`Rank ${String(r.rank).padStart(3, ' ')}\` **${r.name}** (ID: \`${r.id}\`)`).join('\n') || '*None*';
 
             const embed = new EmbedBuilder()
-                .setTitle('👑 FreshlyPlaza — Roblox Group Rank Hierarchy')
-                .setDescription(`Showing all **${roles.length}** official group ranks configured in the FreshlyPlaza Roblox group (\`${RobloxManager.getGroupId()}\`). You can use any of these role names or rank numbers in \`/rank\`.`)
+                .setTitle('👑 Grandway Shopping — Roblox Group Rank Hierarchy')
+                .setDescription(`Showing all **${roles.length}** official group ranks configured in the Grandway Shopping Roblox group (\`${RobloxManager.getGroupId()}\`). You can use any of these role names or rank numbers in \`/rank\`.`)
                 .addFields(
                     { name: '🏛️ Foundership & Executive Leadership (Rank 245–255)', value: formatRoles(execRanks), inline: false },
                     { name: '👔 Middle Management / MR & Corporate (Rank 11–244)', value: formatRoles(mrRanks), inline: false },
@@ -500,7 +500,7 @@ module.exports = [
                     { name: '🛍️ Members, Customers & Trainees (Rank 0–4)', value: formatRoles(memberRanks), inline: false }
                 )
                 .setColor(config.colors.primary)
-                .setFooter({ text: 'FreshlyPlaza Automated Ranking Directory' })
+                .setFooter({ text: 'Grandway Shopping Automated Ranking Directory' })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });

@@ -82,8 +82,8 @@ module.exports = [
             let dmSent = true;
             try {
                 const dmEmbed = new EmbedBuilder()
-                    .setTitle('📋 FreshlyPlaza — Shift Performance Evaluation')
-                    .setDescription(`Hello <@${targetUser.id}>,\n\nYou have received an official **Shift Evaluation** from shift leadership for your performance on duty at **FreshlyPlaza**!`)
+                    .setTitle('📋 Grandway Shopping — Shift Performance Evaluation')
+                    .setDescription(`Hello <@${targetUser.id}>,\n\nYou have received an official **Shift Evaluation** from shift leadership for your performance on duty at **Grandway Shopping**!`)
                     .addFields(
                         { name: '🏪 Assigned Duty Station', value: station, inline: true },
                         { name: '⭐ Performance Rating', value: `${stars} (${rating}/5)`, inline: true },
@@ -92,7 +92,7 @@ module.exports = [
                         { name: '🆔 Evaluation Record', value: `#${evaluation.id}`, inline: true }
                     )
                     .setColor(rating >= 4 ? config.colors.primary : rating === 3 ? config.colors.warning : config.colors.danger)
-                    .setFooter({ text: 'FreshlyPlaza Staff Operations', iconURL: interaction.guild.iconURL() })
+                    .setFooter({ text: 'Grandway Shopping Staff Operations', iconURL: interaction.guild.iconURL() })
                     .setTimestamp();
 
                 await targetUser.send({ embeds: [dmEmbed] });
@@ -134,7 +134,7 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('customer-feedback')
-            .setDescription('Submit customer feedback / receipt review for a shopping trip at FreshlyPlaza')
+            .setDescription('Submit customer feedback / receipt review for a shopping trip at Grandway Shopping')
             .addIntegerOption(opt => 
                 opt.setName('rating')
                     .setDescription('Your overall shopping experience (1 to 5 stars)')
@@ -182,7 +182,7 @@ module.exports = [
             if (staffMentioned) {
                 try {
                     const staffEmbed = new EmbedBuilder()
-                        .setTitle('🌟 FreshlyPlaza — You Received Customer Feedback!')
+                        .setTitle('🌟 Grandway Shopping — You Received Customer Feedback!')
                         .setDescription(`A customer left a review mentioning you for outstanding customer service during their shopping trip!`)
                         .addFields(
                             { name: '⭐ Rating', value: `${stars} (${rating}/5)`, inline: true },
@@ -190,7 +190,7 @@ module.exports = [
                             { name: '💬 Customer Review', value: comments, inline: false }
                         )
                         .setColor(config.colors.primary)
-                        .setFooter({ text: 'FreshlyPlaza Customer Care', iconURL: interaction.guild.iconURL() })
+                        .setFooter({ text: 'Grandway Shopping Customer Care', iconURL: interaction.guild.iconURL() })
                         .setTimestamp();
 
                     await staffMentioned.send({ embeds: [staffEmbed] });
@@ -218,7 +218,7 @@ module.exports = [
                         { name: '💬 Review', value: comments, inline: false }
                     )
                     .setColor(rating >= 4 ? config.colors.primary : rating === 3 ? config.colors.warning : config.colors.danger)
-                    .setFooter({ text: 'FreshlyPlaza Customer Care & Experience' })
+                    .setFooter({ text: 'Grandway Shopping Customer Care & Experience' })
                     .setTimestamp();
 
                 await reviewChannel.send({ embeds: [publicEmbed] });

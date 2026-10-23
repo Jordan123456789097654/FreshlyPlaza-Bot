@@ -126,7 +126,7 @@ async function dispatchIaAlert(client, { title, description, color, priority }) 
                 .setDescription(description)
                 .addFields(
                     { name: '🚨 Priority', value: `\`${priority}\``, inline: true },
-                    { name: '🛡️ Automated Monitor', value: 'FreshlyPlaza IA Anti-Abuse Sentinel', inline: true }
+                    { name: '🛡️ Automated Monitor', value: 'Grandway Shopping IA Anti-Abuse Sentinel', inline: true }
                 )
                 .setColor(color)
                 .setFooter({ text: 'Immediate Internal Affairs review required.' })

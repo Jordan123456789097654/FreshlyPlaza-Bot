@@ -95,7 +95,7 @@ async function handleTicketChatMessage(message) {
 
     if (imageAttachments.size > 0 && !ticket.ai_disabled && db.isAiEnabled()) {
         const analyzingMsg = await message.channel.send({
-            content: `🔍 **FreshlyBot AI Vision:** Analyzing uploaded screenshot(s)...`
+            content: `🔍 **GrandwayBot AI Vision:** Analyzing uploaded screenshot(s)...`
         });
 
         try {
@@ -122,7 +122,7 @@ async function handleTicketChatMessage(message) {
                 .setTitle('🖼️ Screenshot & Proof Analysis')
                 .setDescription(aiAnalysis.resolution_message || 'Screenshot proof has been recorded and processed.')
                 .setColor(config.colors.secondary)
-                .setFooter({ text: 'FreshlyPlaza AI Vision • Qwen Multimodal' })
+                .setFooter({ text: 'Grandway Shopping AI Vision • Qwen Multimodal' })
                 .setTimestamp();
 
             if (aiAnalysis.image_summary) {
@@ -208,7 +208,7 @@ async function handleTicketChatMessage(message) {
                     .setTitle(`🌐 AI Real-Time Stream (${translationCheck.detected_language} ➔ English)`)
                     .setDescription(`**Staff Translation:**\n> ${translationCheck.translated_text}`)
                     .setColor(config.colors.secondary)
-                    .setFooter({ text: 'FreshlyPlaza Dual Translation Stream' });
+                    .setFooter({ text: 'Grandway Shopping Dual Translation Stream' });
 
                 await message.channel.send({ embeds: [userTransEmbed] });
             }
@@ -257,7 +257,7 @@ async function handleTicketChatMessage(message) {
 
                 const shieldAlert = new EmbedBuilder()
                     .setTitle('🛡️ AI Safety Shield: Conduct Violation')
-                    .setDescription(`Your message triggered FreshlyPlaza's extreme toxicity filter. You have been placed on a 1-hour timeout and this incident has been logged to Server Moderation.`)
+                    .setDescription(`Your message triggered Grandway Shopping's extreme toxicity filter. You have been placed on a 1-hour timeout and this incident has been logged to Server Moderation.`)
                     .setColor(config.colors.danger);
                 return message.channel.send({ embeds: [shieldAlert] });
             }
@@ -267,7 +267,7 @@ async function handleTicketChatMessage(message) {
                 ticket.flagged_toxic = true;
                 const toxicAlert = new EmbedBuilder()
                     .setTitle('⚠️ Automated Conduct Warning')
-                    .setDescription('Please refrain from aggressive language or harassment. FreshlyPlaza staff are here to help maintain a respectful environment.')
+                    .setDescription('Please refrain from aggressive language or harassment. Grandway Shopping staff are here to help maintain a respectful environment.')
                     .setColor(config.colors.danger);
                 await message.channel.send({ embeds: [toxicAlert] });
             }
@@ -301,7 +301,7 @@ async function handleTicketChatMessage(message) {
                     .setTitle('🤖 Autonomous Action Executed: Account Verified')
                     .setDescription(`I have automatically verified and linked your Roblox account **${targetRobloxUser}** (ID: \`${robloxId}\`) with your Discord profile!\n\nYour roles and perks have been updated.`)
                     .setColor(config.colors.primary)
-                    .setFooter({ text: 'FreshlyBot AI Autonomous Actions' });
+                    .setFooter({ text: 'GrandwayBot AI Autonomous Actions' });
 
                 await message.channel.send({ embeds: [autoActionEmbed] });
                 return;
@@ -310,10 +310,10 @@ async function handleTicketChatMessage(message) {
             // Case A: AI can resolve the issue
             if (aiResult.can_handle) {
                 const aiResponseEmbed = new EmbedBuilder()
-                    .setTitle('🤖 FreshlyBot AI Support')
+                    .setTitle('🤖 GrandwayBot AI Support')
                     .setDescription(aiResult.resolution_message)
                     .setColor(config.colors.primary)
-                    .setFooter({ text: 'FreshlyPlaza Multi-Turn AI Support • Need human help? Reply saying "I need staff".' })
+                    .setFooter({ text: 'Grandway Shopping Multi-Turn AI Support • Need human help? Reply saying "I need staff".' })
                     .setTimestamp();
 
                 await message.channel.send({ embeds: [aiResponseEmbed] });
@@ -403,7 +403,7 @@ async function handleTicketChatMessage(message) {
                             );
 
                             const ghostEmbed = new EmbedBuilder()
-                                .setTitle('🤖 FreshlyBot Ghostwriter — Suggested Staff Response')
+                                .setTitle('🤖 GrandwayBot Ghostwriter — Suggested Staff Response')
                                 .setDescription(`> ${ghostSuggestion}`)
                                 .setColor(config.colors.secondary)
                                 .setFooter({ text: 'Staff can send this directly with one click or type their own custom response.' });
@@ -416,10 +416,10 @@ async function handleTicketChatMessage(message) {
                 } else {
                     // Give user the best answer first rather than immediately pinging staff
                     const assistEmbed = new EmbedBuilder()
-                        .setTitle('🤖 FreshlyBot AI Guidance')
+                        .setTitle('🤖 GrandwayBot AI Guidance')
                         .setDescription(aiResult.resolution_message)
                         .setColor(config.colors.secondary)
-                        .setFooter({ text: 'FreshlyPlaza AI Assistant • Still need staff? Simply reply "I need a human".' })
+                        .setFooter({ text: 'Grandway Shopping AI Assistant • Still need staff? Simply reply "I need a human".' })
                         .setTimestamp();
 
                     await message.channel.send({ embeds: [assistEmbed] });

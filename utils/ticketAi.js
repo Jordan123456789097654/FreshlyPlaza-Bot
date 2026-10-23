@@ -7,7 +7,7 @@ function aiOn() {
 }
 
 /**
- * Groq AI Support Agent for FreshlyPlaza Support Tickets
+ * Groq AI Support Agent for Grandway Shopping Support Tickets
  * Features:
  * - Dynamic Few-Shot Learning from verified tickets in freshlyplaza_db.json
  * - Vision & Screenshot Analysis via Qwen Multimodal
@@ -16,7 +16,7 @@ function aiOn() {
  * - On-the-fly Translation for non-English queries
  */
 
-const BASE_SYSTEM_PROMPT = `You are "FreshlyBot AI Support", the friendly, polite, and intelligent customer support assistant for FreshlyPlaza (a modern Roblox Supermarket and grocery store experience).
+const BASE_SYSTEM_PROMPT = `You are "GrandwayBot AI Support", the friendly, polite, and intelligent customer support assistant for Grandway Shopping (a modern Roblox Supermarket and grocery store experience).
 
 ⚠️ BETA NOTICE:
 You are currently running in BETA. Tickets handled by this system are actively used to train and improve the AI model.
@@ -24,7 +24,7 @@ You are currently running in BETA. Tickets handled by this system are actively u
 Tone & Demeanor Guidelines (MANDATORY):
 - Always be exceptionally polite, warm, professional, and welcoming.
 - When opening a ticket or first responding to a customer, ALWAYS start with a friendly, courteous greeting such as:
-  "Hello! My name is FreshlyBot AI, your FreshlyPlaza Support Assistant. How may I assist you today?"
+  "Hello! My name is GrandwayBot AI, your Grandway Shopping Support Assistant. How may I assist you today?"
 - Address users with respect and clarity. Avoid robotic or blunt language.
 
 Store Information & Policies:
@@ -39,7 +39,7 @@ Store Information & Policies:
     - Provide a message explaining that management will review their application here in this ticket, and prompt them to provide:
       1. Roblox Username & Portfolio / Past Experience.
       2. Skills / Specialty (Building, Scripting, UI, Modeling, etc.).
-      3. Why they want to join the FreshlyPlaza team.
+      3. Why they want to join the Grandway Shopping team.
     - NEVER close the ticket or auto-resolve applications!
 - Shifts: Hosted regularly by shift hosts in the #store-shifts channel. Players can shop aisles, use checkouts, or work as colleagues.
 - Trainings: Scheduled in #training-sessions for Trainees to pass Store Colleague or Greggs bakery roles.
@@ -108,7 +108,7 @@ async function handleTicketWithAI(ticket, initialMessage, userTag, imageBuffers 
             can_handle: false,
             confidence: 0,
             escalation_reason: 'AI assistant is disabled by an administrator.',
-            resolution_message: 'Thank you for reaching out to FreshlyPlaza Support! A member of our human support team will review your ticket shortly.',
+            resolution_message: 'Thank you for reaching out to Grandway Shopping Support! A member of our human support team will review your ticket shortly.',
             image_summary: null,
             suggested_category: null,
             is_known_bug: false,
@@ -153,7 +153,7 @@ async function handleTicketWithAI(ticket, initialMessage, userTag, imageBuffers 
         const allBugs = db.getData().bugs || [];
         const openBugs = allBugs.filter(b => b.status === 'PENDING').slice(-5);
         if (openBugs.length > 0) {
-            knownBugsContext = '\n\nKnown Open Bug Reports in FreshlyPlaza (actively tracked by developers):\n' +
+            knownBugsContext = '\n\nKnown Open Bug Reports in Grandway Shopping (actively tracked by developers):\n' +
                 openBugs.map(b => `- #${b.id}: "${b.title}" (Details: ${b.details})`).join('\n');
         }
 
@@ -164,7 +164,7 @@ async function handleTicketWithAI(ticket, initialMessage, userTag, imageBuffers 
         const activeTrainings = db.getData().trainings ? db.getData().trainings.filter(t => t.status === 'ACTIVE') : [];
         const upcomingEvents = db.getData().events ? db.getData().events.filter(e => e.status === 'UPCOMING') : [];
 
-        scheduleAndEventsContext += '\n\nLive Store Operations & Upcoming Schedules (FreshlyPlaza Live State):';
+        scheduleAndEventsContext += '\n\nLive Store Operations & Upcoming Schedules (Grandway Shopping Live State):';
         if (activeSession) {
             scheduleAndEventsContext += `\n- Current Active Shift: Session #${activeSession.id} is LIVE now! Host: <@${activeSession.host_id}>, Store Link: ${activeSession.store_link || 'https://www.roblox.com/games/76637220767393/FreshlyPlazza-V2'}`;
         } else {
@@ -279,7 +279,7 @@ async function handleTicketWithAI(ticket, initialMessage, userTag, imageBuffers 
             parsed.resolution_message = `Hello <@${ticket.user_id}>! As this ticket concerns an official **${ticket.type.toUpperCase()}** matter, our specialized Human Support Team has been dispatched to review your evidence.`;
         }
 
-        let cleanResolution = parsed.resolution_message || 'Thank you for contacting FreshlyPlaza Support!';
+        let cleanResolution = parsed.resolution_message || 'Thank you for contacting Grandway Shopping Support!';
         // Fix any literal "@username" string with real clickable Discord mention <@userId>
         if (cleanResolution.includes(`@${userTag}`)) {
             cleanResolution = cleanResolution.replace(new RegExp(`@${userTag}`, 'g'), `<@${ticket.user_id}>`);
@@ -347,7 +347,7 @@ async function generateTicketSummary(ticket, messageHistoryText) {
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an executive ticket summarizer for FreshlyPlaza Roblox Supermarket.
+                        content: `You are an executive ticket summarizer for Grandway Shopping Roblox Supermarket.
 Analyze the ticket conversation history and generate an executive handover brief for staff in JSON.
 Structure:
 {
@@ -400,9 +400,9 @@ async function generateStaffGhostwrite(ticket, lastCustomerMessage) {
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an expert customer service ghostwriter for FreshlyPlaza Roblox staff.
+                        content: `You are an expert customer service ghostwriter for Grandway Shopping Roblox staff.
 Given the customer's question/concern, draft a professional, warm, polite, and helpful reply that a staff member can send with one click.
-Keep it under 3-4 sentences. Do NOT include placeholders like [Your Name]. Sign off as 'FreshlyPlaza Support Team'.
+Keep it under 3-4 sentences. Do NOT include placeholders like [Your Name]. Sign off as 'Grandway Shopping Support Team'.
 Return JSON:
 {
   "suggested_reply": "draft response text"
@@ -458,7 +458,7 @@ async function evaluateTicketQA(ticket, transcriptText) {
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an objective Quality Assurance (QA) auditor for FreshlyPlaza Roblox Supermarket customer support.
+                        content: `You are an objective Quality Assurance (QA) auditor for Grandway Shopping Roblox Supermarket customer support.
 Audit the ticket transcript upon closure.
 Rate staff performance and resolution on a scale of 1 to 10.
 Return JSON:
@@ -514,7 +514,7 @@ async function translateText(text, targetLanguage = 'English') {
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an expert real-time translator for FreshlyPlaza customer support.
+                        content: `You are an expert real-time translator for Grandway Shopping customer support.
 Translate the user text cleanly into ${targetLanguage}.
 Maintain all Discord emojis, tags (@user, <@&role>), and markdown syntax.
 Return ONLY a valid JSON object:

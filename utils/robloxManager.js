@@ -9,7 +9,7 @@ const GROUP_ID = process.env.ROBLOX_GROUP_ID || '1110376670';
 function robloxRequest(options, postData = null) {
     return new Promise((resolve, reject) => {
         const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FreshlyPlazaBot/1.0',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Grandway ShoppingBot/1.0',
             ...(options.headers || {})
         };
 

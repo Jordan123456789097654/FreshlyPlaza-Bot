@@ -9,8 +9,8 @@ function buildVoteEmbed(vote, hostUser, guild) {
     const target = vote.target_votes || 5;
 
     const embed = new EmbedBuilder()
-        .setTitle('🛒 FreshlyPlaza — Store Shift Community Vote!')
-        .setDescription(`Should we host an official **FreshlyPlaza Store Shift** right now?\n\nCast your vote below! If we hit **${target} YES votes** or majority when the timer finishes, store doors will open for shifts!`)
+        .setTitle('🛒 Grandway Shopping — Store Shift Community Vote!')
+        .setDescription(`Should we host an official **Grandway Shopping Store Shift** right now?\n\nCast your vote below! If we hit **${target} YES votes** or majority when the timer finishes, store doors will open for shifts!`)
         .addFields(
             { name: '👤 Host Candidate', value: hostUser ? `<@${hostUser.id}>` : `<@${vote.host_id}>`, inline: true },
             { name: '🎯 Vote Target', value: `**${target}** YES votes`, inline: true },
@@ -18,7 +18,7 @@ function buildVoteEmbed(vote, hostUser, guild) {
             { name: '📊 Live Vote Tally', value: `🟢 **YES:** \`${yesCount}\`\n🔴 **NO:** \`${noCount}\``, inline: false }
         )
         .setColor(config.colors.secondary)
-        .setFooter({ text: `Vote ID: #${vote.id} • FreshlyPlaza Operations`, iconURL: guild ? guild.iconURL() : null })
+        .setFooter({ text: `Vote ID: #${vote.id} • Grandway Shopping Operations`, iconURL: guild ? guild.iconURL() : null })
         .setTimestamp();
 
     return embed;
@@ -76,7 +76,7 @@ function buildStaffStationEmbed(vote, hostUser, guild) {
     const totalStaff = vote.staff_stations ? Object.keys(vote.staff_stations).length : 0;
 
     const embed = new EmbedBuilder()
-        .setTitle('🧑‍💼 FreshlyPlaza — Shift Staffing & Station Roster')
+        .setTitle('🧑‍💼 Grandway Shopping — Shift Staffing & Station Roster')
         .setDescription(`A store shift community vote (**Vote #${vote.id}**) has been initiated by ${hostUser ? `<@${hostUser.id}>` : `<@${vote.host_id}>`}!\n\n**Can you join this upcoming shift?**\nSelect your station below so management can ensure complete store coverage:`)
         .addFields(
             { name: '👤 Shift Host', value: hostUser ? `<@${hostUser.id}>` : `<@${vote.host_id}>`, inline: true },
@@ -86,7 +86,7 @@ function buildStaffStationEmbed(vote, hostUser, guild) {
             { name: '📋 Current Station Roster', value: rosterText.slice(0, 1024), inline: false }
         )
         .setColor(config.colors.secondary)
-        .setFooter({ text: `Vote ID: #${vote.id} • FreshlyPlaza Staff Operations`, iconURL: guild ? guild.iconURL() : null })
+        .setFooter({ text: `Vote ID: #${vote.id} • Grandway Shopping Staff Operations`, iconURL: guild ? guild.iconURL() : null })
         .setTimestamp();
 
     return embed;
@@ -134,15 +134,15 @@ async function concludeShiftVote(vote, guild, concludedBy = null) {
 
     if (passed) {
         const passEmbed = new EmbedBuilder()
-            .setTitle('🎉 FreshlyPlaza — Shift Vote PASSED!')
+            .setTitle('🎉 Grandway Shopping — Shift Vote PASSED!')
             .setDescription(`The community has voted **YES** to hosting a store shift!\n\n**Final Tally:** 🟢 **${yesCount} YES** vs 🔴 **${noCount} NO**\n**Shift Host:** <@${vote.host_id}>\n\nThe store will be opening shortly! Prepare your aprons and head on down!`)
             .setColor(config.colors.primary)
-            .setFooter({ text: `Vote ID: #${vote.id} • FreshlyPlaza Operations`, iconURL: guild.iconURL() })
+            .setFooter({ text: `Vote ID: #${vote.id} • Grandway Shopping Operations`, iconURL: guild.iconURL() })
             .setTimestamp();
 
         const joinRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setLabel('🛒 Join FreshlyPlaza Store')
+                .setLabel('🛒 Join Grandway Shopping Store')
                 .setStyle(ButtonStyle.Link)
                 .setURL(config.robloxGameLink)
         );
@@ -155,14 +155,14 @@ async function concludeShiftVote(vote, guild, concludedBy = null) {
 
         // Send public announcement
         await channel.send({
-            content: `<@&${config.roles.shiftPing}> 🎉 **THE SHIFT VOTE HAS PASSED!**\nWith **${yesCount} YES votes**, <@${vote.host_id}> will be hosting a store shift shortly!\n👉 [Click here to join FreshlyPlaza](${config.robloxGameLink})`
+            content: `<@&${config.roles.shiftPing}> 🎉 **THE SHIFT VOTE HAS PASSED!**\nWith **${yesCount} YES votes**, <@${vote.host_id}> will be hosting a store shift shortly!\n👉 [Click here to join Grandway Shopping](${config.robloxGameLink})`
         });
     } else {
         const failEmbed = new EmbedBuilder()
-            .setTitle('❌ FreshlyPlaza — Shift Vote Concluded (Not Passed)')
+            .setTitle('❌ Grandway Shopping — Shift Vote Concluded (Not Passed)')
             .setDescription(`The shift vote has ended and did not receive enough support to host a store shift at this time.\n\n**Final Tally:** 🟢 **${yesCount} YES** vs 🔴 **${noCount} NO**\nThank you to everyone who voted! A shift may be scheduled later.`)
             .setColor(config.colors.danger)
-            .setFooter({ text: `Vote ID: #${vote.id} • FreshlyPlaza Operations`, iconURL: guild.iconURL() })
+            .setFooter({ text: `Vote ID: #${vote.id} • Grandway Shopping Operations`, iconURL: guild.iconURL() })
             .setTimestamp();
 
         if (message) {
@@ -181,7 +181,7 @@ async function concludeShiftVote(vote, guild, concludedBy = null) {
                 const rosterText = formatStaffRoster(vote.staff_stations);
                 const totalStaff = vote.staff_stations ? Object.keys(vote.staff_stations).length : 0;
                 const concludeStaffEmbed = new EmbedBuilder()
-                    .setTitle(passed ? '🎉 FreshlyPlaza — Shift Vote PASSED (Staff Assigned)' : '❌ FreshlyPlaza — Shift Vote Ended')
+                    .setTitle(passed ? '🎉 Grandway Shopping — Shift Vote PASSED (Staff Assigned)' : '❌ Grandway Shopping — Shift Vote Ended')
                     .setDescription(passed 
                         ? `The community shift vote **PASSED**! Thank you to the **${totalStaff}** staff members who signed up. Please prepare to join the store!` 
                         : 'The shift vote did not pass. Staff stations for this session are dismissed.')
@@ -228,7 +228,7 @@ const commands = [
                             member.permissions.has('ManageGuild');
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ You must be a FreshlyPlaza staff member to initiate a store shift vote.', ephemeral: true });
+                return interaction.reply({ content: '❌ You must be a Grandway Shopping staff member to initiate a store shift vote.', ephemeral: true });
             }
 
             const db = getDb();
@@ -388,7 +388,7 @@ const commands = [
                     { name: `🔴 Voted NO (${noCount})`, value: noList.slice(0, 1024), inline: false }
                 )
                 .setColor(vote.status === 'PASSED' ? config.colors.primary : config.colors.secondary)
-                .setFooter({ text: `FreshlyPlaza Operations • Total: ${yesCount + noCount} votes` })
+                .setFooter({ text: `Grandway Shopping Operations • Total: ${yesCount + noCount} votes` })
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed], ephemeral: true });

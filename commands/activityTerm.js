@@ -26,7 +26,7 @@ module.exports = [
 
             if (!isManager) {
                 return interaction.reply({ 
-                    content: '❌ Only FreshlyPlaza Leadership / HR can terminate staff members.', 
+                    content: '❌ Only Grandway Shopping Leadership / HR can terminate staff members.', 
                     flags: MessageFlags.Ephemeral 
                 });
             }
@@ -86,8 +86,8 @@ module.exports = [
             // 4. SEND DM TO TERMED USER WITH APPEAL BUTTON
             const expiresTimestamp = Math.floor((Date.now() + 30 * 24 * 60 * 60 * 1000) / 1000);
             const dmEmbed = new EmbedBuilder()
-                .setTitle('⚠️ FreshlyPlaza — Notice of Staff Termination')
-                .setDescription(`Hello <@${targetUser.id}>,\n\nThis is an official notice that your staff position at **FreshlyPlaza** has been **terminated** due to inactivity during our mandatory Staff Activity Check.\n\nYour staff roles have been removed from the server.`)
+                .setTitle('⚠️ Grandway Shopping — Notice of Staff Termination')
+                .setDescription(`Hello <@${targetUser.id}>,\n\nThis is an official notice that your staff position at **Grandway Shopping** has been **terminated** due to inactivity during our mandatory Staff Activity Check.\n\nYour staff roles have been removed from the server.`)
                 .addFields(
                     { name: '📋 Termination Reason', value: reason, inline: false },
                     { name: '🛡️ Actioned By', value: `<@${interaction.user.id}>`, inline: true },
@@ -96,7 +96,7 @@ module.exports = [
                     { name: '⚖️ Appeal Policy', value: 'If your appeal is approved by leadership, your staff position and former server roles will be automatically reinstated.', inline: false }
                 )
                 .setColor(config.colors.danger)
-                .setFooter({ text: 'FreshlyPlaza Management Team', iconURL: interaction.guild.iconURL() })
+                .setFooter({ text: 'Grandway Shopping Management Team', iconURL: interaction.guild.iconURL() })
                 .setTimestamp();
 
             const appealRow = new ActionRowBuilder().addComponents(
@@ -199,7 +199,7 @@ module.exports = [
 
             if (!isManager) {
                 return interaction.reply({ 
-                    content: '❌ Only FreshlyPlaza Leadership / HR can issue activity check warnings.', 
+                    content: '❌ Only Grandway Shopping Leadership / HR can issue activity check warnings.', 
                     flags: MessageFlags.Ephemeral 
                 });
             }
@@ -229,7 +229,7 @@ module.exports = [
             const expiresTimestamp = Math.floor((Date.now() + hours * 60 * 60 * 1000) / 1000);
 
             const warnEmbed = new EmbedBuilder()
-                .setTitle('⚠️ FreshlyPlaza — FINAL WARNING: Mandatory Staff Activity Check')
+                .setTitle('⚠️ Grandway Shopping — FINAL WARNING: Mandatory Staff Activity Check')
                 .setDescription(`Hello <@${targetUser.id}>,\n\n**THIS IS YOUR FINAL WARNING.**\n\nOur records indicate that you failed to respond to the recent mandatory Staff Activity Check. Instead of immediate termination of your position, leadership has granted you **one final opportunity** to confirm your staff activity.\n\nPlease click the button below within **${hours} hours** (<t:${expiresTimestamp}:R> | <t:${expiresTimestamp}:f>) to confirm you wish to retain your position.\n\n⚠️ **Failure to confirm within this final deadline will result in immediate termination of your staff position and role forfeiture without further notice.**`)
                 .addFields(
                     { name: '🛡️ Issued By', value: `<@${interaction.user.id}>`, inline: true },
@@ -237,7 +237,7 @@ module.exports = [
                     { name: '📌 Action Required', value: 'Click the **✅ Confirm Activity (Final Warning)** button below to keep your staff role.', inline: false }
                 )
                 .setColor(config.colors.warning)
-                .setFooter({ text: 'FreshlyPlaza Management & Foundership Team', iconURL: interaction.guild.iconURL() })
+                .setFooter({ text: 'Grandway Shopping Management & Foundership Team', iconURL: interaction.guild.iconURL() })
                 .setTimestamp();
 
             const confirmRow = new ActionRowBuilder().addComponents(

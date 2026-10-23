@@ -51,7 +51,7 @@ async function handleInteraction(interaction) {
                 }
             }
 
-            return interaction.reply({ content: '✅ **Activity Confirmed!** Thank you for your continued dedication to the FreshlyPlaza staff team.', ephemeral: true });
+            return interaction.reply({ content: '✅ **Activity Confirmed!** Thank you for your continued dedication to the Grandway Shopping staff team.', ephemeral: true });
         }
 
         // Internal Affairs Voice Recording Stop Button
@@ -78,7 +78,7 @@ async function handleInteraction(interaction) {
                     .setTitle('⏹️ [INTERNAL AFFAIRS] RECORDING CONCLUDED')
                     .setDescription(`Audio wiretap **${record.id}** stopped and exported.\nDownload the interactive player attachment below.`)
                     .setColor(0x2ECC71)
-                    .setFooter({ text: 'FreshlyPlaza Internal Affairs Vault' })
+                    .setFooter({ text: 'Grandway Shopping Internal Affairs Vault' })
                     .setTimestamp();
 
                 return interaction.followUp({ embeds: [doneEmbed], files: [att] });
@@ -219,7 +219,7 @@ async function handleInteraction(interaction) {
                     }
                 )
                 .setColor(unconfirmedStaff.length === 0 ? config.colors.primary : config.colors.warning)
-                .setFooter({ text: 'FreshlyPlaza Staff Management' })
+                .setFooter({ text: 'Grandway Shopping Staff Management' })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -338,7 +338,7 @@ async function handleInteraction(interaction) {
                     { name: `🔴 Voted NO (${noCount})`, value: noList.slice(0, 1024), inline: false }
                 )
                 .setColor(config.colors.secondary)
-                .setFooter({ text: `FreshlyPlaza Operations • Total: ${yesCount + noCount} votes` })
+                .setFooter({ text: `Grandway Shopping Operations • Total: ${yesCount + noCount} votes` })
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -353,7 +353,7 @@ async function handleInteraction(interaction) {
                             member.permissions.has('ManageGuild');
 
             if (!isStaff) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza staff members can claim shift duty stations.', ephemeral: true });
+                return interaction.reply({ content: '❌ Only Grandway Shopping staff members can claim shift duty stations.', ephemeral: true });
             }
 
             const stationMap = {
@@ -471,7 +471,7 @@ async function handleInteraction(interaction) {
                     const user = await interaction.client.users.fetch(loa.user_id);
                     if (user) {
                         await user.send({
-                            content: `❌ **Your FreshlyPlaza LOA Request #${loa.id} was DENIED** by <@${interaction.user.id}>.\nIf you have any questions, please contact management.`
+                            content: `❌ **Your Grandway Shopping LOA Request #${loa.id} was DENIED** by <@${interaction.user.id}>.\nIf you have any questions, please contact management.`
                         });
                     }
                 } catch (e) {}
@@ -534,7 +534,7 @@ async function handleInteraction(interaction) {
             );
 
             if (!isManager) {
-                return interaction.reply({ content: '❌ Only FreshlyPlaza Leadership / MR+ can review community suggestions.', ephemeral: true });
+                return interaction.reply({ content: '❌ Only Grandway Shopping Leadership / MR+ can review community suggestions.', ephemeral: true });
             }
 
             let newStatus = 'ACCEPTED';
@@ -569,7 +569,7 @@ async function handleInteraction(interaction) {
                 if (submitter) {
                     const statusName = newStatus === 'ACCEPTED' ? '✅ ACCEPTED' : newStatus === 'IN_PROGRESS' ? '🚧 IN PROGRESS' : '❌ DENIED';
                     await submitter.send({
-                        content: `💡 **FreshlyPlaza Suggestion Update (#${sug.id})**\n\nYour suggestion: *"${sug.suggestion.slice(0, 100)}..."* has been marked as **${statusName}** by <@${interaction.user.id}>!\nThank you for contributing to FreshlyPlaza.`
+                        content: `💡 **Grandway Shopping Suggestion Update (#${sug.id})**\n\nYour suggestion: *"${sug.suggestion.slice(0, 100)}..."* has been marked as **${statusName}** by <@${interaction.user.id}>!\nThank you for contributing to Grandway Shopping.`
                     });
                 }
             } catch (e) {}
@@ -615,7 +615,7 @@ async function handleInteraction(interaction) {
 
             const guild = interaction.client.guilds.cache.get(config.guildId) || interaction.guild;
             if (!guild) {
-                return interaction.editReply({ content: '❌ Could not find FreshlyPlaza server. Please open a ticket in the server.' });
+                return interaction.editReply({ content: '❌ Could not find Grandway Shopping server. Please open a ticket in the server.' });
             }
 
             const { TICKET_CATEGORIES, buildTicketControlRow } = require('../commands/ticket');
@@ -725,7 +725,7 @@ async function handleInteraction(interaction) {
 
             if (!isStaff) {
                 return interaction.reply({
-                    content: '❌ Only FreshlyPlaza Staff can transfer tickets to another department.',
+                    content: '❌ Only Grandway Shopping Staff can transfer tickets to another department.',
                     flags: MessageFlags.Ephemeral
                 });
             }
@@ -750,7 +750,7 @@ async function handleInteraction(interaction) {
 
             if (!isStaff) {
                 return interaction.reply({
-                    content: '❌ Quick Support Snippets are only accessible to FreshlyPlaza Staff.',
+                    content: '❌ Quick Support Snippets are only accessible to Grandway Shopping Staff.',
                     flags: MessageFlags.Ephemeral
                 });
             }
@@ -795,7 +795,7 @@ async function handleInteraction(interaction) {
                     { name: '👉 Recommended Staff Action', value: `> ${summary.recommended_action || 'Review conversation and advise customer.'}`, inline: false }
                 )
                 .setColor(config.colors.secondary)
-                .setFooter({ text: 'FreshlyPlaza AI Assistant • Staff Executive Briefing' })
+                .setFooter({ text: 'Grandway Shopping AI Assistant • Staff Executive Briefing' })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [summaryEmbed] });
@@ -913,7 +913,7 @@ async function handleInteraction(interaction) {
                 const ticketUser = await interaction.client.users.fetch(ticket.user_id);
                 if (ticketUser) {
                     const dmEmbed = new EmbedBuilder()
-                        .setTitle(`🏪 FreshlyPlaza — Ticket #${ticket.id} Closed`)
+                        .setTitle(`🏪 Grandway Shopping — Ticket #${ticket.id} Closed`)
                         .setDescription(`Your support ticket in **${config.storeName}** has been closed.\nAn HTML transcript is attached for your records. Please rate your support experience below!`)
                         .setColor(config.colors.primary);
 
@@ -1040,7 +1040,7 @@ async function handleInteraction(interaction) {
             );
 
             if (!isManager) {
-                return interaction.editReply({ content: '❌ Only FreshlyPlaza Leadership / HR can accept appeals.' });
+                return interaction.editReply({ content: '❌ Only Grandway Shopping Leadership / HR can accept appeals.' });
             }
 
             term.appeal_status = 'ACCEPTED';
@@ -1086,7 +1086,7 @@ async function handleInteraction(interaction) {
             try {
                 const user = await interaction.client.users.fetch(term.user_id);
                 await user.send({
-                    content: `🎉 **FreshlyPlaza Staff Appeal Accepted!**\n\nYour activity check appeal has been **approved** by <@${interaction.user.id}>!\nAll your previous staff roles have been **reinstated** to your account.\n\nWelcome back to the team! Please ensure to stay active and monitor upcoming staff announcements.`
+                    content: `🎉 **Grandway Shopping Staff Appeal Accepted!**\n\nYour activity check appeal has been **approved** by <@${interaction.user.id}>!\nAll your previous staff roles have been **reinstated** to your account.\n\nWelcome back to the team! Please ensure to stay active and monitor upcoming staff announcements.`
                 });
             } catch (e) {}
 
@@ -1110,7 +1110,7 @@ async function handleInteraction(interaction) {
             );
 
             if (!isManager) {
-                return interaction.editReply({ content: '❌ Only FreshlyPlaza Leadership / HR can deny appeals.' });
+                return interaction.editReply({ content: '❌ Only Grandway Shopping Leadership / HR can deny appeals.' });
             }
 
             term.appeal_status = 'DENIED';
@@ -1133,7 +1133,7 @@ async function handleInteraction(interaction) {
             try {
                 const user = await interaction.client.users.fetch(term.user_id);
                 await user.send({
-                    content: `❌ **FreshlyPlaza Staff Appeal Denied**\n\nYour activity check appeal has been reviewed and **denied** by <@${interaction.user.id}>.\nYour position termination remains in effect. You may re-apply during the next open application period.`
+                    content: `❌ **Grandway Shopping Staff Appeal Denied**\n\nYour activity check appeal has been reviewed and **denied** by <@${interaction.user.id}>.\nYour position termination remains in effect. You may re-apply during the next open application period.`
                 });
             } catch (e) {}
 
@@ -1209,7 +1209,7 @@ async function handleInteraction(interaction) {
                 member.permissions.has(PermissionFlagsBits.Administrator)
             );
             if (!isManager) {
-                return interaction.editReply({ content: '❌ Only FreshlyPlaza Leadership / HR can accept appeals.' });
+                return interaction.editReply({ content: '❌ Only Grandway Shopping Leadership / HR can accept appeals.' });
             }
 
             record.status = 'ACCEPTED';
@@ -1232,7 +1232,7 @@ async function handleInteraction(interaction) {
                 const user = await interaction.client.users.fetch(record.user_id);
                 if (user) {
                     await user.send({
-                        content: `🎉 **FreshlyPlaza Appeal Approved!**\n\nYour appeal for **${record.appeal_type}** (#${record.id}) has been **accepted** by <@${interaction.user.id}>!\nAny associated restrictions have been lifted. Welcome back!`
+                        content: `🎉 **Grandway Shopping Appeal Approved!**\n\nYour appeal for **${record.appeal_type}** (#${record.id}) has been **accepted** by <@${interaction.user.id}>!\nAny associated restrictions have been lifted. Welcome back!`
                     });
                 }
             } catch (e) {}
@@ -1256,7 +1256,7 @@ async function handleInteraction(interaction) {
                 member.permissions.has(PermissionFlagsBits.Administrator)
             );
             if (!isManager) {
-                return interaction.editReply({ content: '❌ Only FreshlyPlaza Leadership / HR can deny appeals.' });
+                return interaction.editReply({ content: '❌ Only Grandway Shopping Leadership / HR can deny appeals.' });
             }
 
             record.status = 'DENIED';
@@ -1279,7 +1279,7 @@ async function handleInteraction(interaction) {
                 const user = await interaction.client.users.fetch(record.user_id);
                 if (user) {
                     await user.send({
-                        content: `❌ **FreshlyPlaza Appeal Denied**\n\nYour appeal for **${record.appeal_type}** (#${record.id}) has been reviewed and **denied** by <@${interaction.user.id}>.\nThe punishment remains in effect.`
+                        content: `❌ **Grandway Shopping Appeal Denied**\n\nYour appeal for **${record.appeal_type}** (#${record.id}) has been reviewed and **denied** by <@${interaction.user.id}>.\nThe punishment remains in effect.`
                     });
                 }
             } catch (e) {}
@@ -1364,7 +1364,7 @@ async function handleInteraction(interaction) {
                             `**Attached Evidence Links:**\n${evidence}`
                         )
                         .setColor(0x1A5276)
-                        .setFooter({ text: 'FreshlyPlaza IA Whistleblower Protection Protocol' })
+                        .setFooter({ text: 'Grandway Shopping IA Whistleblower Protection Protocol' })
                         .setTimestamp();
 
                     await docketCh.send({ embeds: [alertEmbed] }).catch(() => {});
@@ -1380,7 +1380,7 @@ async function handleInteraction(interaction) {
                     `Keep this token safe. You can use it to reference this case with Internal Affairs leadership.`
                 )
                 .setColor(0x2ECC71)
-                .setFooter({ text: 'FreshlyPlaza Internal Affairs Anti-Retaliation Guarantee' });
+                .setFooter({ text: 'Grandway Shopping Internal Affairs Anti-Retaliation Guarantee' });
 
             return interaction.followUp({ embeds: [confirmEmbed] });
         }
@@ -1451,7 +1451,7 @@ async function handleInteraction(interaction) {
                         { name: '❓ Will this happen again / Future Availability', value: future.slice(0, 1024), inline: false }
                     )
                     .setColor(config.colors.warning)
-                    .setFooter({ text: `Term ID: #${term.id} • FreshlyPlaza Appeal Management` })
+                    .setFooter({ text: `Term ID: #${term.id} • Grandway Shopping Appeal Management` })
                     .setTimestamp();
 
                 const decisionRow = new ActionRowBuilder().addComponents(
@@ -1473,7 +1473,7 @@ async function handleInteraction(interaction) {
             }
 
             return interaction.reply({
-                content: '✅ **Your Staff Activity Appeal has been submitted!** FreshlyPlaza leadership will review your answers. You will receive a direct message once a decision is made.',
+                content: '✅ **Your Staff Activity Appeal has been submitted!** Grandway Shopping leadership will review your answers. You will receive a direct message once a decision is made.',
                 flags: MessageFlags.Ephemeral
             });
         }
@@ -1520,7 +1520,7 @@ async function handleInteraction(interaction) {
                         { name: '❓ Prevention / Future Commitments', value: prevention.slice(0, 1024), inline: false }
                     )
                     .setColor(config.colors.warning)
-                    .setFooter({ text: `Appeal ID: #${record.id} • FreshlyPlaza Moderation` })
+                    .setFooter({ text: `Appeal ID: #${record.id} • Grandway Shopping Moderation` })
                     .setTimestamp();
 
                 const decisionRow = new ActionRowBuilder().addComponents(
@@ -1542,7 +1542,7 @@ async function handleInteraction(interaction) {
             }
 
             return interaction.reply({
-                content: '✅ **Your Appeal has been successfully submitted!** FreshlyPlaza leadership will review your answers. You will receive a direct message when a decision is made.',
+                content: '✅ **Your Appeal has been successfully submitted!** Grandway Shopping leadership will review your answers. You will receive a direct message when a decision is made.',
                 flags: MessageFlags.Ephemeral
             });
         }
@@ -1633,7 +1633,7 @@ async function handleInteraction(interaction) {
                 const ticketUser = await interaction.client.users.fetch(ticket.user_id);
                 if (ticketUser) {
                     const dmEmbed = new EmbedBuilder()
-                        .setTitle(`🏪 FreshlyPlaza — Ticket #${ticket.id} Closed`)
+                        .setTitle(`🏪 Grandway Shopping — Ticket #${ticket.id} Closed`)
                         .setDescription(`Your support ticket has been closed.\nAn official transcript has been attached for your records.`)
                         .addFields(
                             { name: 'Reason', value: reason, inline: true },
@@ -1687,7 +1687,7 @@ async function handleInteraction(interaction) {
                 );
                 if (!isStaff) {
                     return interaction.editReply({
-                        content: '🚫 **Access Denied:** The `DATA-ENTRIES` category is strictly reserved for verified FreshlyPlaza Staff members.'
+                        content: '🚫 **Access Denied:** The `DATA-ENTRIES` category is strictly reserved for verified Grandway Shopping Staff members.'
                     });
                 }
             }
@@ -1817,7 +1817,7 @@ async function handleInteraction(interaction) {
                         ? `Hello <@${interaction.user.id}>! You have opened a **DATA-ENTRIES** ticket.\n\n🚫 **AI Support is DISABLED** for this room. You are speaking directly with ${staffMention}.\n\nPlease provide your data entries, roster updates, or internal records below.`
                         : `Hello <@${interaction.user.id}>! Welcome to your private support channel.\n\n` +
                         (isVipOrStaff ? `⭐ **VIP / Staff Fast-Track:** *Your ticket has been fast-tracked to High Priority for accelerated management review.*\n\n` : '') +
-                        `⚠️ **AI Beta Notice:** *Our automated AI assistant is currently in beta. It may occasionally get things wrong. All tickets opened will help train and refine our AI model to better serve FreshlyPlaza customers!*\n\n` +
+                        `⚠️ **AI Beta Notice:** *Our automated AI assistant is currently in beta. It may occasionally get things wrong. All tickets opened will help train and refine our AI model to better serve Grandway Shopping customers!*\n\n` +
                         `🤖 **AI Assistant:** The AI is analyzing your issue. If standard store guidance applies, an instant solution will be posted. Otherwise, this ticket is prioritized and dispatched directly to ${staffMention}.`
                 )
                 .addFields(
@@ -1830,7 +1830,7 @@ async function handleInteraction(interaction) {
                 )
                 .setColor(catConfig.color)
                 .setTimestamp()
-                .setFooter({ text: catConfig.aiDisabled ? 'FreshlyPlaza Data Room • Human Staff Only' : 'FreshlyPlaza Ticket Suite • AI in Beta', iconURL: interaction.guild.iconURL() });
+                .setFooter({ text: catConfig.aiDisabled ? 'Grandway Shopping Data Room • Human Staff Only' : 'Grandway Shopping Ticket Suite • AI in Beta', iconURL: interaction.guild.iconURL() });
 
             if (isOutsideHours && !catConfig.aiDisabled) {
                 welcomeEmbed.addFields({
@@ -1947,7 +1947,7 @@ async function handleInteraction(interaction) {
                         ticketRecord.flagged_toxic = true;
                         const toxicAlertEmbed = new EmbedBuilder()
                             .setTitle('⚠️ Automated Toxic / Profanity Detection Warning')
-                            .setDescription(`Customer message was flagged for hostile or inappropriate language.\n\n**Warning:** FreshlyPlaza maintains a zero-tolerance policy for harassment and abusive conduct. Continued toxicity may lead to a ticket blacklist or server timeout.\n\n*Notice for Staff:* High-priority de-escalation advised.`)
+                            .setDescription(`Customer message was flagged for hostile or inappropriate language.\n\n**Warning:** Grandway Shopping maintains a zero-tolerance policy for harassment and abusive conduct. Continued toxicity may lead to a ticket blacklist or server timeout.\n\n*Notice for Staff:* High-priority de-escalation advised.`)
                             .setColor(config.colors.danger)
                             .setTimestamp();
                         await ticketChannel.send({ embeds: [toxicAlertEmbed] });
@@ -1964,7 +1964,7 @@ async function handleInteraction(interaction) {
                                 `*Note: AI responses to customer will automatically be provided in their native language!*`
                             )
                             .setColor(config.colors.secondary)
-                            .setFooter({ text: 'FreshlyPlaza Multi-Language Support Engine' });
+                            .setFooter({ text: 'Grandway Shopping Multi-Language Support Engine' });
                         await ticketChannel.send({ embeds: [translationEmbed] });
                     }
 
@@ -1974,10 +1974,10 @@ async function handleInteraction(interaction) {
                             .setTitle('🐛 Known Bug Detected — Patch in Progress')
                             .setDescription(
                                 `Our AI detected this issue matches a known report: **${aiResult.matched_bug_title || 'Known Glitch'}**.\n\n` +
-                                `FreshlyPlaza development is already actively working on a fix for this bug in the supermarket! You do not need to take any further action.`
+                                `Grandway Shopping development is already actively working on a fix for this bug in the supermarket! You do not need to take any further action.`
                             )
                             .setColor(config.colors.warning)
-                            .setFooter({ text: 'FreshlyPlaza Bug Deduplication System' });
+                            .setFooter({ text: 'Grandway Shopping Bug Deduplication System' });
                         await ticketChannel.send({ embeds: [duplicateEmbed] });
                     } else if (aiResult.is_new_bug && aiResult.bug_title) {
                         // Automatically file new verified bug in bugs table and dispatch to #bug-reports
@@ -2023,13 +2023,13 @@ async function handleInteraction(interaction) {
                         aiResult.escalation_reason = 'Staff / Developer Application received. Human leadership review required.';
                         if (!aiResult.resolution_message || aiResult.resolution_message.includes('join our official Discord server') || aiResult.resolution_message.includes('#staff-applications')) {
                             aiResult.resolution_message = 
-                                `Hello! 👋 Thank you for your interest in joining the FreshlyPlaza team!\n\n` +
+                                `Hello! 👋 Thank you for your interest in joining the Grandway Shopping team!\n\n` +
                                 `Our leadership reviews all Developer & Staff applications directly inside support tickets.\n` +
                                 `Please leave your ticket open and reply with:\n` +
                                 `1. **Roblox Username:**\n` +
                                 `2. **Role Applying For:** (e.g. Scripter, Builder, UI, 3D Modeler, Staff)\n` +
                                 `3. **Portfolio / Past Experience:** (Links or screenshots of past work)\n` +
-                                `4. **Why FreshlyPlaza:**\n\n` +
+                                `4. **Why Grandway Shopping:**\n\n` +
                                 `Our management team will review your application here shortly!`;
                         }
                     }
@@ -2049,14 +2049,14 @@ async function handleInteraction(interaction) {
                         });
 
                         const aiAssistantEmbed = new EmbedBuilder()
-                            .setTitle('🤖 FreshlyPlaza AI Assistant')
+                            .setTitle('🤖 Grandway Shopping AI Assistant')
                             .setDescription(aiResult.resolution_message)
                             .addFields(
                                 { name: '📊 Urgency & Sentiment', value: `Urgency: \`${ticketRecord.priority}\` • Sentiment: \`${ticketRecord.sentiment || 'neutral'}\``, inline: true },
                                 { name: '💬 Need Human Staff?', value: 'If this answered your question, you can close the ticket below. Otherwise, human colleagues have also been notified and will assist you here!', inline: false }
                             )
                             .setColor(config.colors.primary)
-                            .setFooter({ text: 'FreshlyPlaza AI Customer Support' });
+                            .setFooter({ text: 'Grandway Shopping AI Customer Support' });
 
                         await ticketChannel.send({ embeds: [aiAssistantEmbed] });
                     } else {
@@ -2111,7 +2111,7 @@ async function handleInteraction(interaction) {
                     const reviewChannel = interaction.client.channels.cache.get(reviewChannelId);
                     if (reviewChannel) {
                         const stars = '⭐'.repeat(rating);
-                        const helperStaff = ticketRecord?.claimed_by ? `<@${ticketRecord.claimed_by}>` : 'FreshlyPlaza Support Team';
+                        const helperStaff = ticketRecord?.claimed_by ? `<@${ticketRecord.claimed_by}>` : 'Grandway Shopping Support Team';
                         const reviewEmbed = new EmbedBuilder()
                             .setTitle(`⭐ New Verified Customer Support Review!`)
                             .setDescription(
@@ -2121,7 +2121,7 @@ async function handleInteraction(interaction) {
                                 `• **Ticket Category:** \`${(ticketRecord?.type || 'General').toUpperCase()}\``
                             )
                             .setColor(config.colors.primary)
-                            .setFooter({ text: 'FreshlyPlaza Customer Satisfaction Review' })
+                            .setFooter({ text: 'Grandway Shopping Customer Satisfaction Review' })
                             .setTimestamp();
 
                         await reviewChannel.send({ embeds: [reviewEmbed] });
@@ -2132,7 +2132,7 @@ async function handleInteraction(interaction) {
             }
 
             const thanksEmbed = new EmbedBuilder()
-                .setTitle('⭐ FreshlyPlaza Support Feedback Received')
+                .setTitle('⭐ Grandway Shopping Support Feedback Received')
                 .setDescription(
                     `Thank you for taking the time to share your feedback!\n\n` +
                     `• **Rating:** ${'⭐'.repeat(rating)} (${rating}/5)\n` +
@@ -2140,7 +2140,7 @@ async function handleInteraction(interaction) {
                     `Your feedback has been logged to our Management Quality Dashboard.`
                 )
                 .setColor(rating >= 4 ? config.colors.primary : config.colors.warning)
-                .setFooter({ text: 'FreshlyPlaza Customer Support Quality Team' });
+                .setFooter({ text: 'Grandway Shopping Customer Support Quality Team' });
 
             return interaction.reply({ embeds: [thanksEmbed], flags: MessageFlags.Ephemeral });
         }
@@ -2163,7 +2163,7 @@ async function handleInteraction(interaction) {
         let formattedDesc = selectedTag.desc
             .replace(/\{staff\}/g, staffName)
             .replace(/\{customer\}/g, customerMention)
-            .replace(/\{store\}/g, config.storeName || 'FreshlyPlaza');
+            .replace(/\{store\}/g, config.storeName || 'Grandway Shopping');
 
         const embed = new EmbedBuilder()
             .setTitle(selectedTag.title)
@@ -2271,7 +2271,7 @@ async function handleInteraction(interaction) {
             );
             if (!isStaff) {
                 return interaction.reply({
-                    content: '🚫 **Access Denied:** The `DATA-ENTRIES` category is strictly reserved for verified FreshlyPlaza Staff members.',
+                    content: '🚫 **Access Denied:** The `DATA-ENTRIES` category is strictly reserved for verified Grandway Shopping Staff members.',
                     flags: MessageFlags.Ephemeral
                 });
             }
@@ -2291,7 +2291,7 @@ async function handleInteraction(interaction) {
         if (isBanned) {
             const expText = isBanned.expires_at ? `<t:${Math.floor(new Date(isBanned.expires_at).getTime() / 1000)}:R>` : 'Never (Permanent)';
             return interaction.reply({
-                content: `🚫 **Ticket Access Restricted:** You are blacklisted from opening FreshlyPlaza tickets.\n• **Reason:** ${isBanned.reason}\n• **Expires:** ${expText}`,
+                content: `🚫 **Ticket Access Restricted:** You are blacklisted from opening Grandway Shopping tickets.\n• **Reason:** ${isBanned.reason}\n• **Expires:** ${expText}`,
                 flags: MessageFlags.Ephemeral
             });
         }
@@ -2400,7 +2400,7 @@ async function handleInteraction(interaction) {
                 )
                 .setColor(catConfig.color)
                 .setTimestamp()
-                .setFooter({ text: 'FreshlyPlaza Data Room • Human Staff Only', iconURL: interaction.guild.iconURL() });
+                .setFooter({ text: 'Grandway Shopping Data Room • Human Staff Only', iconURL: interaction.guild.iconURL() });
 
             await ticketChannel.send({
                 content: `<@${catConfig.targetUserId}>`,

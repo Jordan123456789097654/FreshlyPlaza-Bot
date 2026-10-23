@@ -1,8 +1,8 @@
 const config = require('../config');
 
 /**
- * Roblox User & Profile Lookup Helper for FreshlyPlaza Support Tickets
- * Fetches user info, avatar headshot, account creation date, and group rank in FreshlyPlaza.
+ * Roblox User & Profile Lookup Helper for Grandway Shopping Support Tickets
+ * Fetches user info, avatar headshot, account creation date, and group rank in Grandway Shopping.
  */
 async function fetchRobloxUserProfile(username) {
     if (!username || typeof username !== 'string') return null;

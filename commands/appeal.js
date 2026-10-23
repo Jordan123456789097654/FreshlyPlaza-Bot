@@ -44,7 +44,7 @@ module.exports = {
 
         const targetUser = interaction.options.getUser('user');
         const appealType = interaction.options.getString('type');
-        const reason = interaction.options.getString('reason') || 'Violation of FreshlyPlaza rules / Staff policies';
+        const reason = interaction.options.getString('reason') || 'Violation of Grandway Shopping rules / Staff policies';
 
         const db = getDb();
         const data = db.getData();
@@ -65,10 +65,10 @@ module.exports = {
         db.save();
 
         const dmEmbed = new EmbedBuilder()
-            .setTitle(`⚖️ FreshlyPlaza — Official Punishment Appeal Notice`)
+            .setTitle(`⚖️ Grandway Shopping — Official Punishment Appeal Notice`)
             .setDescription(
                 `Hello <@${targetUser.id}>,\n\n` +
-                `An appeal window has been opened for your recent punishment (**${appealType}**) by FreshlyPlaza Leadership.\n\n` +
+                `An appeal window has been opened for your recent punishment (**${appealType}**) by Grandway Shopping Leadership.\n\n` +
                 `If you believe this action was issued in error or would like to request reinstatement/review, please click the **📝 Submit Appeal** button below to complete the appeal form.`
             )
             .addFields(
@@ -77,11 +77,11 @@ module.exports = {
                 { name: '📋 Stated Reason', value: `\`\`\`${reason}\`\`\``, inline: false },
                 { 
                     name: '📌 How It Works', 
-                    value: 'Click the button below to submit your explanation, justification, and Roblox username. Your appeal will be routed directly to FreshlyPlaza Leadership for review.' 
+                    value: 'Click the button below to submit your explanation, justification, and Roblox username. Your appeal will be routed directly to Grandway Shopping Leadership for review.' 
                 }
             )
             .setColor(config.colors.primary)
-            .setFooter({ text: `Appeal Record #${appealId} • FreshlyPlaza Moderation & Appeals` })
+            .setFooter({ text: `Appeal Record #${appealId} • Grandway Shopping Moderation & Appeals` })
             .setTimestamp();
 
         const appealRow = new ActionRowBuilder().addComponents(

@@ -20,7 +20,7 @@ function buildSuggestionEmbed(sug) {
     }
 
     const embed = new EmbedBuilder()
-        .setTitle(`💡 FreshlyPlaza Suggestion #${sug.id}`)
+        .setTitle(`💡 Grandway Shopping Suggestion #${sug.id}`)
         .setDescription(sug.suggestion)
         .addFields(
             { name: '👤 Submitted By', value: `<@${sug.user_id}>`, inline: true },
@@ -28,7 +28,7 @@ function buildSuggestionEmbed(sug) {
             { name: '📊 Community Feedback', value: `👍 **${upvotes}** Upvotes • 👎 **${downvotes}** Downvotes`, inline: false }
         )
         .setColor(statusColor)
-        .setFooter({ text: 'FreshlyPlaza Community Suggestions' })
+        .setFooter({ text: 'Grandway Shopping Community Suggestions' })
         .setTimestamp();
 
     if (sug.action_reason) {
@@ -77,8 +77,8 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('suggest')
-            .setDescription('Submit a community suggestion for FreshlyPlaza')
-            .addStringOption(opt => opt.setName('suggestion').setDescription('Your suggestion for FreshlyPlaza').setRequired(true)),
+            .setDescription('Submit a community suggestion for Grandway Shopping')
+            .addStringOption(opt => opt.setName('suggestion').setDescription('Your suggestion for Grandway Shopping').setRequired(true)),
         async execute(interaction) {
             const db = getDb();
             const suggestionText = interaction.options.getString('suggestion');

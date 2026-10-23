@@ -28,7 +28,7 @@ module.exports = [
             const worldTime = formatWorldTime(now);
 
             const embed = new EmbedBuilder()
-                .setTitle(`🎊 FreshlyPlaza Event — ${title}`)
+                .setTitle(`🎊 Grandway Shopping Event — ${title}`)
                 .setDescription(description)
                 .addFields(
                     { name: '👤 Host', value: `<@${interaction.user.id}>`, inline: true },

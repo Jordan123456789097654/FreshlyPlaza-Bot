@@ -40,7 +40,7 @@ async function checkInactiveTickets(client) {
                         `⚠️ **Automatic Close Notice:** If no response is received within the next **12 hours**, this ticket will automatically be resolved and closed.`
                     )
                     .setColor(config.colors.warning)
-                    .setFooter({ text: 'FreshlyPlaza Automated Inactivity Monitor' })
+                    .setFooter({ text: 'Grandway Shopping Automated Inactivity Monitor' })
                     .setTimestamp();
 
                 await channel.send({ content: `<@${ticket.user_id}>`, embeds: [warnEmbed] });
