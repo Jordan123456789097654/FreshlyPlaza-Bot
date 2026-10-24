@@ -15,6 +15,7 @@ const { trackMessageForGhostPing, handleGhostPing } = require('./handlers/ghostP
 const { handleLoaPing } = require('./handlers/loaPingHandler');
 const { handleIncomingModmailDm, handleStaffModmailMessage } = require('./handlers/modmailHandler');
 const { setupAuditLogger } = require('./handlers/auditLogger');
+const WebPortal = require('./utils/webPortal');
 
 const client = new Client({
     intents: [
@@ -1015,6 +1016,184 @@ const server = http.createServer((req, res) => {
             note: 'Bot status has been reset to NORMAL / UP (HTTP 200 on /health).',
             timestamp: new Date().toISOString()
         }, null, 2));
+    }
+
+    // 7.1. Public Punishment & Ban Appeal Portal (/appeal)
+    if (pathname === '/appeal') {
+        if (req.method === 'GET') {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            return res.end(WebPortal.renderAppealPage());
+        }
+
+        if (req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => body += chunk);
+            req.on('end', async () => {
+                try {
+                    const parsed = new URLSearchParams(body);
+                    const discordId = (parsed.get('discordId') || '').trim();
+                    const robloxUsername = (parsed.get('robloxUsername') || '').trim();
+                    const appealType = (parsed.get('appealType') || 'Discord Server Ban').trim();
+                    const reason = (parsed.get('reason') || '').trim();
+                    const statement = (parsed.get('statement') || '').trim();
+                    const prevention = (parsed.get('prevention') || '').trim();
+
+                    if (!discordId || !robloxUsername || !statement) {
+                        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+                        return res.end(WebPortal.renderAppealPage('Please fill out all required fields.'));
+                    }
+
+                    // Forward to appeals channel in Discord
+                    const appealsChannelId = config.channels.activityAppeals || config.channels.ticketLogs || config.channels.modLogs;
+                    const channel = client.channels.cache.get(appealsChannelId);
+                    if (channel) {
+                        const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+                        const appealEmbed = new EmbedBuilder()
+                            .setTitle(`⚖️ Web Appeal Submitted: ${appealType}`)
+                            .setDescription(`An official punishment appeal has been submitted via the **Grandway Web Portal**.`)
+                            .addFields(
+                                { name: '👤 Discord Identity', value: '`' + discordId + '`', inline: true },
+                                { name: '🎮 Roblox Username', value: `**${robloxUsername}**`, inline: true },
+                                { name: '⚖️ Punishment Type', value: appealType, inline: true },
+                                { name: '📝 Stated Reason', value: ```${reason}```, inline: false },
+                                { name: '❓ Why should this be appealed?', value: statement.slice(0, 1024), inline: false },
+                                { name: '🛡️ Future Commitments', value: prevention.slice(0, 1024), inline: false }
+                            )
+                            .setColor(config.colors.secondary)
+                            .setFooter({ text: 'Grandway Web Appeal Portal' })
+                            .setTimestamp();
+
+                        await channel.send({
+                            content: `📢 **NEW WEB APPEAL SUBMITTED:** ${robloxUsername} (${appealType})`,
+                            embeds: [appealEmbed]
+                        });
+                    }
+
+                    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                    return res.end(WebPortal.renderAppealPage(null, 'Your appeal has been successfully submitted! Grandway Leadership has received your statement and will review it shortly.'));
+                } catch (err) {
+                    res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+                    return res.end(WebPortal.renderAppealPage('Failed to submit appeal: ' + err.message));
+                }
+            });
+            return;
+        }
+    }
+
+    // 7.2. Colleague & Shift Leaderboard (/leaderboard)
+    if (pathname === '/leaderboard') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(WebPortal.renderLeaderboardPage());
+    }
+
+    // 7.3. Staff Web Dashboard (/staff)
+    if (pathname === '/staff') {
+        const db = getDb();
+        const data = db.getData();
+        const allTickets = data.tickets || [];
+        const activeTickets = allTickets.filter(t => t.status !== 'CLOSED' && t.status !== 'RESOLVED_BY_AI');
+
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(WebPortal.renderStaffDashboard(true, activeTickets, {
+            totalTickets: allTickets.length,
+            avgWait: '< 2m'
+        }));
+    }
+
+    // 7.4. Staff Web Actions API (/api/staff/reply & /api/staff/close)
+    if (pathname === '/api/staff/reply' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { ticketId, text, isAnon } = JSON.parse(body);
+                const db = getDb();
+                const ticket = await db.getTicketById(ticketId);
+                if (!ticket || ticket.status === 'CLOSED') {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Active ticket not found' }));
+                }
+
+                const targetUser = await client.users.fetch(ticket.user_id);
+                if (!targetUser) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Could not fetch user' }));
+                }
+
+                const { EmbedBuilder } = require('discord.js');
+                const dmEmbed = new EmbedBuilder()
+                    .setAuthor({
+                        name: isAnon ? `${config.storeName} ModMail Team 🛡️` : 'Grandway Staff Web Operator',
+                        iconURL: client.user.displayAvatarURL({ dynamic: true })
+                    })
+                    .setDescription(text)
+                    .setColor(config.colors.secondary)
+                    .setFooter({ text: `${config.storeName} Official Response • Web Operator` })
+                    .setTimestamp();
+
+                await targetUser.send({ embeds: [dmEmbed] });
+
+                // Also notify staff channel in Discord
+                if (ticket.channel_id) {
+                    const ch = client.channels.cache.get(ticket.channel_id);
+                    if (ch) {
+                        const receipt = new EmbedBuilder()
+                            .setAuthor({ name: '🌐 Web Dashboard Operator' })
+                            .setDescription(text)
+                            .setColor(config.colors.secondary)
+                            .setFooter({ text: 'Dispatched via Staff Web Dashboard' })
+                            .setTimestamp();
+                        await ch.send({ embeds: [receipt] });
+                    }
+                }
+
+                await db.addTicketNote(ticket.channel_id, 'WEB_OPERATOR', `[WEB REPLY]: ${text}`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/staff/close' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { ticketId, reason } = JSON.parse(body);
+                const db = getDb();
+                const ticket = await db.getTicketById(ticketId);
+                if (!ticket) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Ticket not found' }));
+                }
+
+                const { closeModmailThread } = require('./handlers/modmailHandler');
+                const ch = client.channels.cache.get(ticket.channel_id);
+                if (ch) {
+                    await closeModmailThread({
+                        channel: ch,
+                        ticket,
+                        closedByUser: client.user,
+                        reason: reason || 'Closed via Web Dashboard',
+                        client
+                    });
+                } else {
+                    ticket.status = 'CLOSED';
+                    db.save();
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
     }
 
     // 7.5. Online Ticket Transcript Web Viewer
