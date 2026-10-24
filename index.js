@@ -24,11 +24,17 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.DirectMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildModeration,
         GatewayIntentBits.GuildPresences,
         GatewayIntentBits.GuildVoiceStates
+    ],
+    partials: [
+        Partials.Channel,
+        Partials.Message,
+        Partials.User
     ]
 });
 
@@ -765,9 +771,16 @@ client.on('guildBanAdd', async (ban) => {
 });
 
 client.on('messageCreate', async (message) => {
+    // 📬 ModMail DMs & Staff Channel Relays
+    if (!message.guild) {
+        await handleIncomingModmailDm(message, client);
+        return;
+    }
+
     trackMessageForGhostPing(message);
     await handleHoneypotMessage(message);
     await handleGtnMessage(message);
+    await handleStaffModmailMessage(message, client);
     await handleTicketChatMessage(message);
     await handleDataEntriesMessage(message);
     await handleLoaPing(message);
