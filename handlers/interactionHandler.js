@@ -376,6 +376,9 @@ async function handleInteraction(interaction) {
                 return interaction.editReply({ content: `✅ Marked Bug **#${bug.id}** as Known Issue & copied to <#${config.channels.knownBugs}>!` });
             }
         }
+
+        // Guess The Number (GTN) Interactive Buttons
+        if (customId.startsWith('gtn_')) {
             const { handleGtnButton } = require('./gtnHandler');
             return await handleGtnButton(interaction);
         }
