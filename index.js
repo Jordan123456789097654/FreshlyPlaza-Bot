@@ -14,6 +14,7 @@ const { handleDataEntriesMessage } = require('./handlers/dataEntriesHandler');
 const { trackMessageForGhostPing, handleGhostPing } = require('./handlers/ghostPingHandler');
 const { handleLoaPing } = require('./handlers/loaPingHandler');
 const { handleIncomingModmailDm, handleStaffModmailMessage } = require('./handlers/modmailHandler');
+const { setupAuditLogger } = require('./handlers/auditLogger');
 
 const client = new Client({
     intents: [
@@ -157,6 +158,9 @@ client.once('clientReady', async () => {
     console.log(`Logged in as: ${client.user.tag}`);
     console.log(`Registered Commands: ${client.commands.size}`);
     console.log(`==========================================`);
+
+    // Initialize full server audit logger
+    setupAuditLogger(client);
 
     await initDatabase();
 

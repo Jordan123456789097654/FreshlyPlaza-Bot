@@ -165,6 +165,27 @@ async function handleInteraction(interaction) {
             return interaction.reply({ content: '🚫 Verification canceled.', ephemeral: true });
         }
 
+        // Verification Center "Verify Account" Prompt Button
+        if (customId === 'btn_start_verification') {
+            const modal = new ModalBuilder()
+                .setCustomId('modal_verify_prompt')
+                .setTitle('Grandway Roblox Verification');
+
+            const usernameInput = new TextInputBuilder()
+                .setCustomId('roblox_username')
+                .setLabel('What is your Roblox username?')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('e.g. Builderman')
+                .setRequired(true)
+                .setMinLength(3)
+                .setMaxLength(30);
+
+            const row = new ActionRowBuilder().addComponents(usernameInput);
+            modal.addComponents(row);
+
+            return await interaction.showModal(modal);
+        }
+
         // Guess The Number (GTN) Interactive Buttons
         if (customId.startsWith('gtn_')) {
             const { handleGtnButton } = require('./gtnHandler');
@@ -1625,6 +1646,14 @@ async function handleInteraction(interaction) {
                 .setFooter({ text: 'Grandway Shopping Internal Affairs Anti-Retaliation Guarantee' });
 
             return interaction.followUp({ embeds: [confirmEmbed] });
+        }
+
+        // Verification Modal Submission
+        if (interaction.customId === 'modal_verify_prompt') {
+            await interaction.deferReply({ ephemeral: true });
+            const usernameInput = interaction.fields.getTextInputValue('roblox_username');
+            const verifyModule = require('../commands/verify');
+            return await verifyModule.startVerificationProcess(interaction, usernameInput);
         }
 
         // Verify Account Modal
