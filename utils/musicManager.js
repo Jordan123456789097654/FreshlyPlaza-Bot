@@ -208,12 +208,22 @@ class GuildMusicQueue {
         }).catch(() => {});
 
         try {
-            const info = await yt.getInfo(track.url);
-            const rawStream = yt.download(info, {
-                quality: Quality.HighestAudio,
-                filter: { hasAudio: true, hasVideo: false },
-                highWaterMark: 1 << 25
-            });
+            let rawStream;
+            try {
+                const info = await yt.getInfo(track.url);
+                rawStream = yt.download(info, {
+                    quality: Quality.HighestAudio,
+                    filter: { hasAudio: true, hasVideo: false },
+                    highWaterMark: 1 << 25
+                });
+            } catch (dlErr) {
+                console.warn(`[PLAY TRACK WARN] yt.getInfo/download error (${dlErr.message}), falling back to direct video ID stream...`);
+                rawStream = yt.download(track.url, {
+                    quality: Quality.HighestAudio,
+                    filter: { hasAudio: true, hasVideo: false },
+                    highWaterMark: 1 << 25
+                });
+            }
 
             const filterStr = this.buildFilterString();
             let finalStream = rawStream;
@@ -497,7 +507,9 @@ const musicManager = {
         }
 
         // 2. Direct Video URL Detection
-        if (/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/.test(cleanQuery)) {
+        const videoIdMatch = cleanQuery.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
+        if (videoIdMatch) {
+            const videoId = videoIdMatch[1];
             try {
                 const info = await yt.getInfo(cleanQuery);
                 const track = {
@@ -517,6 +529,28 @@ const musicManager = {
                 };
                 return { type: 'track', track };
             } catch (vErr) {
+                console.warn(`[YTDL getInfo WARN] Direct info failed (${vErr.message}), falling back to metadata search for ${videoId}...`);
+                try {
+                    const fallback = await yts({ videoId });
+                    if (fallback && fallback.title) {
+                        const track = {
+                            title: fallback.title,
+                            url: fallback.url || `https://www.youtube.com/watch?v=${videoId}`,
+                            duration: fallback.duration?.timestamp || fallback.timestamp || this.formatSeconds(fallback.seconds || 0),
+                            seconds: fallback.seconds || 0,
+                            author: fallback.author ? fallback.author.name : 'Unknown Artist',
+                            thumbnail: fallback.thumbnail || fallback.image || null,
+                            requester: {
+                                id: requester.id,
+                                tag: requester.tag || requester.username,
+                                avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+                            }
+                        };
+                        return { type: 'track', track };
+                    }
+                } catch (fallbackErr) {
+                    console.error('[YTS FALLBACK ERROR]', fallbackErr.message);
+                }
                 throw new Error(`Could not fetch YouTube video details: ${vErr.message}`);
             }
         }

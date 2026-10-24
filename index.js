@@ -1,4 +1,7 @@
 require('dotenv').config();
+try {
+    require('./utils/patchYtdl');
+} catch (_) {}
 const { Client, GatewayIntentBits, Partials, Collection, ActivityType, EmbedBuilder, REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
