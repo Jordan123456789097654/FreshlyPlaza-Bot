@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const { getDb } = require('../database');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SUPPORT_TAGS, buildTicketPanelEmbed } = require('../commands/ticket');
 
 function escapeHtml(str) {
     if (!str) return '';
@@ -15,9 +15,6 @@ function escapeHtml(str) {
 }
 
 const WebPortal = {
-    /**
-     * Render the Public Appeal Form
-     */
     renderAppealPage(error = null, success = null) {
         return `<!DOCTYPE html>
 <html lang="en">
@@ -175,16 +172,12 @@ const WebPortal = {
 </html>`;
     },
 
-    /**
-     * Render the Live Staff Leaderboard
-     */
     renderLeaderboardPage() {
         const db = getDb();
         const data = db.getData();
         const staffActivity = data.staff_activity || {};
         const staffProfiles = data.staff_profiles || {};
 
-        // Sort by shifts hosted
         const sortedHosts = Object.entries(staffActivity)
             .map(([userId, stats]) => ({
                 userId,
@@ -196,7 +189,6 @@ const WebPortal = {
             .sort((a, b) => b.shiftsHosted - a.shiftsHosted)
             .slice(0, 10);
 
-        // Sort by shifts attended
         const sortedAttended = Object.entries(staffActivity)
             .map(([userId, stats]) => ({
                 userId,
@@ -341,28 +333,42 @@ const WebPortal = {
     },
 
     /**
-     * Render the Staff Management Dashboard & ModMail Live Feed
+     * Render the Staff Management Dashboard & ModMail Live Feed with Chat Drawer, Tags, Blacklist, Priority, Notes, and Wait-Time Config
      */
-    renderStaffDashboard(tokenAuth = false, activeTickets = [], metrics = {}) {
-        const ticketRows = activeTickets.map(t => `
-            <div class="ticket-card" id="ticket-${t.id}">
+    renderStaffDashboard(tokenAuth = false, activeTickets = [], allTickets = [], settings = {}) {
+        const snippetOptions = Object.entries(SUPPORT_TAGS).map(([k, t]) => `
+            <option value="${escapeHtml(k)}">${escapeHtml(t.emoji + ' ' + t.title)}</option>
+        `).join('');
+
+        const configuredWait = settings.custom_wait_time || '';
+
+        const ticketCards = activeTickets.map(t => {
+            const priorityClass = t.priority === 'URGENT' ? 'prio-urgent' : (t.priority === 'HIGH' ? 'prio-high' : 'prio-normal');
+            const priorityLabel = t.priority || 'NORMAL';
+
+            return `
+            <div class="ticket-card ${priorityClass}" id="ticket-${t.id}" data-id="${t.id}" data-user="${escapeHtml((t.user_tag || t.user_id).toLowerCase())}" data-category="${escapeHtml((t.type || 'general').toLowerCase())}">
                 <div class="ticket-header">
                     <span class="ticket-id">#${t.id}</span>
                     <span class="category-badge category-${t.type || 'general'}">${(t.type || 'GENERAL').toUpperCase()}</span>
+                    <span class="priority-badge ${priorityClass}">${priorityLabel}</span>
                     <span class="ticket-user">👤 ${escapeHtml(t.user_tag || t.user_id)}</span>
                 </div>
                 <div class="ticket-meta">
                     <span>Opened: ${new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     <span>Channel: #${escapeHtml(t.channel_name || t.channel_id)}</span>
-                    <span>Staff Notes: ${(t.notes || []).length}</span>
+                    <span>Notes: ${(t.notes || []).length}</span>
                 </div>
                 <div class="ticket-actions">
-                    <button class="btn-action btn-reply" onclick="openReplyModal(${t.id}, '${escapeHtml(t.user_tag || t.user_id)}')">💬 Reply to Customer</button>
-                    <a href="/transcript/${t.id}" target="_blank" class="btn-action btn-view">📄 View Live Chat</a>
+                    <button class="btn-action btn-chat" onclick="openChatDrawer(${t.id}, '${escapeHtml(t.user_tag || t.user_id)}', '${t.user_id}', '${t.type || 'general'}', '${priorityLabel}')">💬 Open Live Chat</button>
+                    <button class="btn-action btn-transfer" onclick="openTransferModal(${t.id})">🔄 Transfer</button>
+                    <button class="btn-action btn-prio" onclick="togglePriority(${t.id})">⭐ Priority</button>
+                    <button class="btn-action btn-blacklist" onclick="blacklistUser('${t.user_id}', '${escapeHtml(t.user_tag || t.user_id)}')">🚫 Blacklist</button>
                     <button class="btn-action btn-close" onclick="closeTicket(${t.id})">🔒 Close</button>
                 </div>
             </div>
-        `).join('') || '<div class="empty-box">🎉 No active ModMail tickets in queue right now! All customer requests are resolved.</div>';
+        `;
+        }).join('') || '<div class="empty-box">🎉 No active ModMail tickets in queue right now! All customer requests are resolved.</div>';
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -375,6 +381,7 @@ const WebPortal = {
         :root {
             --primary: #2ECC71;
             --primary-dark: #27ae60;
+            --secondary: #3498DB;
             --bg-dark: #080b12;
             --sidebar-bg: #0f1422;
             --card-bg: rgba(21, 27, 46, 0.7);
@@ -385,7 +392,7 @@ const WebPortal = {
             --warning: #f59e0b;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
-        body { background: var(--bg-dark); color: var(--text-main); min-height: 100vh; display: flex; }
+        body { background: var(--bg-dark); color: var(--text-main); min-height: 100vh; display: flex; overflow-x: hidden; }
         .sidebar {
             width: 260px;
             background: var(--sidebar-bg);
@@ -411,17 +418,57 @@ const WebPortal = {
         }
         .nav-item.active, .nav-item:hover { background: rgba(46, 204, 113, 0.12); color: var(--primary); }
         .main-content { flex: 1; padding: 36px 40px; overflow-y: auto; }
-        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
-        .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 32px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 20px; flex-wrap: wrap; }
+        
+        /* Search & Filters */
+        .search-bar-wrap { display: flex; gap: 12px; margin-bottom: 24px; }
+        .search-input {
+            flex: 1;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 12px 18px;
+            border-radius: 12px;
+            color: #fff;
+            outline: none;
+            font-size: 14px;
+        }
+        .search-input:focus { border-color: var(--primary); }
+
+        .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 28px; }
         .stat-card {
             background: var(--card-bg);
             border: 1px solid var(--border);
-            padding: 22px;
+            padding: 20px;
             border-radius: 16px;
         }
-        .stat-num { font-size: 28px; font-weight: 800; color: #fff; margin-top: 6px; }
-        .stat-label { font-size: 13px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-        .section-title { font-size: 20px; font-weight: 700; margin-bottom: 18px; }
+        .stat-num { font-size: 26px; font-weight: 800; color: #fff; margin-top: 4px; }
+        .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* Wait time config banner */
+        .config-banner {
+            background: rgba(52, 152, 219, 0.1);
+            border: 1px solid rgba(52, 152, 219, 0.3);
+            border-radius: 14px;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .config-banner-text h4 { font-size: 14px; color: #fff; margin-bottom: 2px; }
+        .config-banner-text p { font-size: 12px; color: var(--text-muted); }
+        .config-controls { display: flex; gap: 10px; align-items: center; }
+        .config-input {
+            background: #0b1120;
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 13px;
+            width: 170px;
+            outline: none;
+        }
+
         .ticket-list { display: flex; flex-direction: column; gap: 14px; }
         .ticket-card {
             background: var(--card-bg);
@@ -432,7 +479,12 @@ const WebPortal = {
             justify-content: space-between;
             align-items: center;
             gap: 20px;
+            transition: all 0.2s;
         }
+        .ticket-card.prio-urgent { border-left: 5px solid #ef4444; }
+        .ticket-card.prio-high { border-left: 5px solid #f59e0b; }
+        .ticket-card.prio-normal { border-left: 5px solid #2ECC71; }
+
         .ticket-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
         .ticket-id { font-weight: 800; color: var(--primary); font-size: 15px; }
         .category-badge { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; }
@@ -441,59 +493,149 @@ const WebPortal = {
         .category-management { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
         .category-technical { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
         .category-appeals { background: rgba(20, 184, 166, 0.2); color: #2dd4bf; }
+        
+        .priority-badge { font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 6px; }
+        .prio-urgent { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .prio-high { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+        .prio-normal { background: rgba(46, 204, 113, 0.2); color: #2ECC71; }
+
         .ticket-user { font-weight: 700; color: #fff; font-size: 14px; }
         .ticket-meta { font-size: 13px; color: var(--text-muted); display: flex; gap: 16px; }
-        .ticket-actions { display: flex; gap: 10px; }
+        .ticket-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        
         .btn-action {
-            padding: 10px 16px;
-            border-radius: 10px;
+            padding: 8px 14px;
+            border-radius: 8px;
             border: none;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 700;
             cursor: pointer;
             text-decoration: none;
             transition: all 0.2s;
         }
-        .btn-reply { background: var(--primary); color: #05160d; }
-        .btn-reply:hover { background: var(--primary-dark); }
-        .btn-view { background: rgba(255, 255, 255, 0.08); color: #fff; }
-        .btn-view:hover { background: rgba(255, 255, 255, 0.15); }
-        .btn-close { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
-        .btn-close:hover { background: rgba(239, 68, 68, 0.3); }
-        .empty-box { background: var(--card-bg); border: 1px dashed var(--border); padding: 40px; border-radius: 16px; text-align: center; color: var(--text-muted); }
+        .btn-chat { background: var(--primary); color: #05160d; }
+        .btn-chat:hover { background: var(--primary-dark); }
+        .btn-transfer { background: rgba(52, 152, 219, 0.2); color: #60a5fa; }
+        .btn-prio { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .btn-blacklist { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+        .btn-close { background: rgba(255, 255, 255, 0.08); color: #fff; }
+        .btn-close:hover { background: rgba(239, 68, 68, 0.4); }
 
-        /* Modal */
-        .modal-overlay {
+        /* Slide-over Live Chat Drawer */
+        .drawer-overlay {
             display: none;
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(5px);
-            align-items: center;
-            justify-content: center;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
             z-index: 1000;
         }
-        .modal {
-            background: #111726;
-            border: 1px solid var(--border);
-            border-radius: 18px;
-            max-width: 500px;
-            width: 100%;
-            padding: 28px;
+        .chat-drawer {
+            position: fixed;
+            top: 0; right: -600px; bottom: 0;
+            width: 580px;
+            background: #0f1422;
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            z-index: 1001;
+            transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: -15px 0 35px rgba(0, 0, 0, 0.5);
         }
-        .modal-title { font-size: 18px; font-weight: 800; margin-bottom: 12px; }
-        .modal textarea {
-            width: 100%;
-            background: rgba(15, 23, 42, 0.8);
+        .chat-drawer.open { right: 0; }
+        .drawer-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .drawer-title { font-size: 16px; font-weight: 800; color: #fff; }
+        .drawer-tabs { display: flex; border-bottom: 1px solid var(--border); }
+        .drawer-tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            color: var(--text-muted);
+            background: transparent;
+            border: none;
+        }
+        .drawer-tab.active {
+            color: var(--primary);
+            border-bottom: 2px solid var(--primary);
+            background: rgba(46, 204, 113, 0.05);
+        }
+        .drawer-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .chat-msg {
+            display: flex;
+            flex-direction: column;
+            max-width: 82%;
+            padding: 12px 16px;
+            border-radius: 14px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .chat-msg.customer {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.06);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 14px;
             color: #fff;
-            min-height: 120px;
-            margin: 14px 0;
+        }
+        .chat-msg.staff {
+            align-self: flex-end;
+            background: rgba(46, 204, 113, 0.15);
+            border: 1px solid rgba(46, 204, 113, 0.3);
+            color: #86efac;
+        }
+        .chat-msg.whisper {
+            align-self: center;
+            width: 95%;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #fde68a;
+        }
+        .msg-author { font-size: 11px; font-weight: 700; opacity: 0.8; margin-bottom: 4px; }
+        .msg-time { font-size: 10px; opacity: 0.6; align-self: flex-end; margin-top: 4px; }
+        .drawer-footer {
+            padding: 18px 20px;
+            border-top: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.02);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .snippet-select {
+            background: #090d16;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #fff;
+            font-size: 12px;
             outline: none;
         }
-        .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; }
+        .chat-input-row { display: flex; gap: 10px; }
+        .chat-input {
+            flex: 1;
+            background: #090d16;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+            color: #fff;
+            font-size: 13px;
+            outline: none;
+        }
+        .chat-input:focus { border-color: var(--primary); }
     </style>
 </head>
 <body>
@@ -511,11 +653,28 @@ const WebPortal = {
         <div class="top-bar">
             <div>
                 <h1>🛡️ Staff ModMail Command Center</h1>
-                <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Real-time customer conversation relay & department management</p>
+                <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Live customer messaging desk, department routing, and queue management</p>
             </div>
             <div>
-                <button class="btn-action btn-view" onclick="location.reload()">🔄 Refresh Feed</button>
+                <button class="btn-action btn-close" onclick="location.reload()">🔄 Refresh Feed</button>
             </div>
+        </div>
+
+        <!-- Wait-Time Configuration Banner -->
+        <div class="config-banner">
+            <div class="config-banner-text">
+                <h4>⚡ Live Support Wait Time & Queue Status</h4>
+                <p>Configured here directly updates the Discord #support-center panel embed in real-time.</p>
+            </div>
+            <div class="config-controls">
+                <input type="text" id="customWaitTime" class="config-input" placeholder="e.g. ~2m (Very Fast)" value="${escapeHtml(configuredWait)}">
+                <button class="btn-action btn-chat" onclick="saveWaitTime()">Save Wait Time</button>
+            </div>
+        </div>
+
+        <!-- Search & Filter Bar -->
+        <div class="search-bar-wrap">
+            <input type="text" id="ticketSearch" class="search-input" placeholder="🔍 Search active tickets by Customer Tag, Discord ID, or Category..." onkeyup="filterTickets()">
         </div>
 
         <div class="stat-grid">
@@ -525,11 +684,11 @@ const WebPortal = {
             </div>
             <div class="stat-card">
                 <div class="stat-label">Total Store Tickets</div>
-                <div class="stat-num">${metrics.totalTickets || 0}</div>
+                <div class="stat-num">${allTickets.length}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Avg Wait Time</div>
-                <div class="stat-num">${metrics.avgWait || '< 2m'}</div>
+                <div class="stat-label">Configured Wait</div>
+                <div class="stat-num" id="statWaitDisplay">${escapeHtml(configuredWait || '< 2m')}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">System Uptime</div>
@@ -537,60 +696,169 @@ const WebPortal = {
             </div>
         </div>
 
-        <div class="section-title">Active Customer Support Threads</div>
-        <div class="ticket-list">
-            ${ticketRows}
+        <div class="ticket-list" id="ticketListContainer">
+            ${ticketCards}
         </div>
     </div>
 
-    <!-- Reply Modal -->
-    <div class="modal-overlay" id="replyModal">
-        <div class="modal">
-            <div class="modal-title" id="modalTarget">💬 Reply to Customer</div>
-            <p style="font-size: 13px; color: var(--text-muted);">This message will be instantly delivered to the user's Discord Direct Messages (DMs).</p>
-            <input type="hidden" id="modalTicketId">
-            <textarea id="modalReplyText" placeholder="Type your official support response here..."></textarea>
-            <div style="margin-bottom: 14px;">
-                <label style="font-size: 13px; color: #cbd5e1; cursor: pointer;">
-                    <input type="checkbox" id="modalIsAnon" checked> Send Anonymously as Grandway ModMail Team
-                </label>
+    <!-- Live Chat Drawer Overlay -->
+    <div class="drawer-overlay" id="drawerOverlay" onclick="closeChatDrawer()"></div>
+
+    <!-- Live Chat Drawer -->
+    <div class="chat-drawer" id="chatDrawer">
+        <div class="drawer-header">
+            <div>
+                <div class="drawer-title" id="drawerUserTitle">💬 Live Conversation</div>
+                <div style="font-size: 12px; color: var(--text-muted);" id="drawerSubtitle">ModMail Thread</div>
             </div>
-            <div class="modal-buttons">
-                <button class="btn-action btn-view" onclick="closeReplyModal()">Cancel</button>
-                <button class="btn-action btn-reply" onclick="submitReply()">Send to DMs</button>
+            <button class="btn-action btn-close" onclick="closeChatDrawer()">✕</button>
+        </div>
+
+        <div class="drawer-tabs">
+            <button class="drawer-tab active" id="tabCustomer" onclick="switchDrawerTab('customer')">Customer DM Feed</button>
+            <button class="drawer-tab" id="tabNotes" onclick="switchDrawerTab('notes')">🔒 Internal Staff Notes</button>
+        </div>
+
+        <div class="drawer-body" id="drawerMessages">
+            <div style="text-align: center; color: var(--text-muted); padding: 40px;">Loading messages...</div>
+        </div>
+
+        <div class="drawer-footer">
+            <select class="snippet-select" id="snippetSelect" onchange="applySnippet()">
+                <option value="">⚡ Select a Quick Support Tag Snippet...</option>
+                ${snippetOptions}
+            </select>
+
+            <div class="chat-input-row">
+                <input type="text" class="chat-input" id="drawerInput" placeholder="Type response or internal whisper..." onkeydown="if(event.key === 'Enter') sendDrawerMessage()">
+                <button class="btn-action btn-chat" onclick="sendDrawerMessage()">Send</button>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted);">
+                <label><input type="checkbox" id="drawerAnon" checked> Send Anonymously</label>
+                <span id="tabModeIndicator">Relaying to Customer DMs</span>
             </div>
         </div>
     </div>
 
     <script>
-        function openReplyModal(ticketId, username) {
-            document.getElementById('modalTicketId').value = ticketId;
-            document.getElementById('modalTarget').innerText = '💬 Reply to ' + username;
-            document.getElementById('modalReplyText').value = '';
-            document.getElementById('replyModal').style.display = 'flex';
+        const SNIPPETS = ${JSON.stringify(SUPPORT_TAGS)};
+        let activeDrawerTicketId = null;
+        let activeDrawerUserTag = '';
+        let activeDrawerTab = 'customer';
+
+        function filterTickets() {
+            const query = document.getElementById('ticketSearch').value.toLowerCase().trim();
+            const cards = document.querySelectorAll('.ticket-card');
+            cards.forEach(c => {
+                const user = c.getAttribute('data-user') || '';
+                const cat = c.getAttribute('data-category') || '';
+                const id = c.getAttribute('data-id') || '';
+                if (user.includes(query) || cat.includes(query) || id.includes(query)) {
+                    c.style.display = 'flex';
+                } else {
+                    c.style.display = 'none';
+                }
+            });
         }
 
-        function closeReplyModal() {
-            document.getElementById('replyModal').style.display = 'none';
+        async function openChatDrawer(ticketId, userTag, userId, category, priority) {
+            activeDrawerTicketId = ticketId;
+            activeDrawerUserTag = userTag;
+            document.getElementById('drawerUserTitle').innerText = '💬 ' + userTag + ' (#' + ticketId + ')';
+            document.getElementById('drawerSubtitle').innerText = category.toUpperCase() + ' • ' + priority + ' Priority';
+            document.getElementById('chatDrawer').classList.add('open');
+            document.getElementById('drawerOverlay').style.display = 'block';
+            await loadDrawerMessages();
         }
 
-        async function submitReply() {
-            const ticketId = document.getElementById('modalTicketId').value;
-            const text = document.getElementById('modalReplyText').value.trim();
-            const isAnon = document.getElementById('modalIsAnon').checked;
-            if (!text) return alert('Please enter a response.');
+        function closeChatDrawer() {
+            document.getElementById('chatDrawer').classList.remove('open');
+            document.getElementById('drawerOverlay').style.display = 'none';
+            activeDrawerTicketId = null;
+        }
+
+        function switchDrawerTab(tab) {
+            activeDrawerTab = tab;
+            document.getElementById('tabCustomer').classList.toggle('active', tab === 'customer');
+            document.getElementById('tabNotes').classList.toggle('active', tab === 'notes');
+            document.getElementById('tabModeIndicator').innerText = tab === 'customer' ? 'Relaying to Customer DMs' : '🔒 Internal Whisper (Staff Only)';
+            loadDrawerMessages();
+        }
+
+        async function loadDrawerMessages() {
+            if (!activeDrawerTicketId) return;
+            const body = document.getElementById('drawerMessages');
+            try {
+                const res = await fetch('/api/staff/ticket/' + activeDrawerTicketId + '/messages');
+                const data = await res.json();
+                if (!data.success) {
+                    body.innerHTML = '<div style="color: #ef4444; padding: 20px;">' + (data.error || 'Failed to load') + '</div>';
+                    return;
+                }
+
+                if (activeDrawerTab === 'notes') {
+                    // Show internal notes
+                    const notes = data.notes || [];
+                    if (notes.length === 0) {
+                        body.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px;">No internal whispers logged for this ticket yet.</div>';
+                        return;
+                    }
+                    body.innerHTML = notes.map(n => \`
+                        <div class="chat-msg whisper">
+                            <div class="msg-author">🔒 Internal Whisper • \${n.staff_id || 'Staff'}</div>
+                            <div>\${n.note}</div>
+                            <div class="msg-time">\${new Date(n.created_at || Date.now()).toLocaleTimeString()}</div>
+                        </div>
+                    \`).join('');
+                } else {
+                    // Show live conversation messages
+                    const msgs = data.messages || [];
+                    if (msgs.length === 0) {
+                        body.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px;">No messages recorded yet. Type below to message customer!</div>';
+                        return;
+                    }
+                    body.innerHTML = msgs.map(m => \`
+                        <div class="chat-msg \${m.isStaff ? 'staff' : 'customer'}">
+                            <div class="msg-author">\${m.author} \${m.isAnon ? '(Anonymous)' : ''}</div>
+                            <div>\${m.content}</div>
+                            <div class="msg-time">\${m.time}</div>
+                        </div>
+                    \`).join('');
+                }
+                body.scrollTop = body.scrollHeight;
+            } catch (e) {
+                body.innerHTML = '<div style="color: #ef4444; padding: 20px;">Error loading messages: ' + e.message + '</div>';
+            }
+        }
+
+        function applySnippet() {
+            const key = document.getElementById('snippetSelect').value;
+            if (!key || !SNIPPETS[key]) return;
+            const snip = SNIPPETS[key];
+            const customerName = activeDrawerUserTag ? '@' + activeDrawerUserTag : 'Customer';
+            const resolved = snip.desc
+                .replace(/\\{customer\\}/g, customerName)
+                .replace(/\\{staff\\}/g, 'Grandway Support')
+                .replace(/\\{store\\}/g, '${config.storeName}');
+            document.getElementById('drawerInput').value = resolved;
+        }
+
+        async function sendDrawerMessage() {
+            const text = document.getElementById('drawerInput').value.trim();
+            if (!text || !activeDrawerTicketId) return;
+            const isAnon = document.getElementById('drawerAnon').checked;
 
             try {
-                const res = await fetch('/api/staff/reply', {
+                const endpoint = activeDrawerTab === 'notes' ? '/api/staff/whisper' : '/api/staff/reply';
+                const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ticketId, text, isAnon })
+                    body: JSON.stringify({ ticketId: activeDrawerTicketId, text, isAnon })
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('✅ Response successfully delivered to customer DMs!');
-                    closeReplyModal();
-                    location.reload();
+                    document.getElementById('drawerInput').value = '';
+                    await loadDrawerMessages();
                 } else {
                     alert('❌ Error: ' + (data.error || 'Failed to dispatch'));
                 }
@@ -599,8 +867,74 @@ const WebPortal = {
             }
         }
 
+        async function saveWaitTime() {
+            const val = document.getElementById('customWaitTime').value.trim();
+            try {
+                const res = await fetch('/api/staff/wait-time', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ waitTime: val })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('✅ Live Support Wait Time saved! Discord #support-center panel updated.');
+                    document.getElementById('statWaitDisplay').innerText = val || '< 2m';
+                }
+            } catch (e) {
+                alert('⚠️ Failed to save wait time: ' + e.message);
+            }
+        }
+
+        async function togglePriority(ticketId) {
+            const prio = prompt('Set priority for #' + ticketId + ' (NORMAL, HIGH, URGENT):', 'HIGH');
+            if (!prio) return;
+            try {
+                const res = await fetch('/api/staff/priority', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticketId, priority: prio.toUpperCase() })
+                });
+                const data = await res.json();
+                if (data.success) location.reload();
+            } catch (e) { alert(e.message); }
+        }
+
+        async function openTransferModal(ticketId) {
+            const cat = prompt('Transfer #' + ticketId + ' to department (general, report, management, technical, appeals):', 'management');
+            if (!cat) return;
+            try {
+                const res = await fetch('/api/staff/transfer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticketId, category: cat.toLowerCase() })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('✅ Department transferred!');
+                    location.reload();
+                }
+            } catch (e) { alert(e.message); }
+        }
+
+        async function blacklistUser(userId, userTag) {
+            const reason = prompt('Reason for blacklisting ' + userTag + ' from ModMail:', 'Trolling / harassment');
+            if (!reason) return;
+            try {
+                const res = await fetch('/api/staff/blacklist', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, reason })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('🚫 User ' + userTag + ' has been blacklisted and blocked from opening tickets.');
+                    location.reload();
+                }
+            } catch (e) { alert(e.message); }
+        }
+
         async function closeTicket(ticketId) {
-            if (!confirm('Are you sure you want to close ModMail #' + ticketId + '? This will archive the thread and dispatch a transcript to the customer.')) return;
+            if (!confirm('Are you sure you want to close ModMail #' + ticketId + '?')) return;
             try {
                 const res = await fetch('/api/staff/close', {
                     method: 'POST',
@@ -609,14 +943,10 @@ const WebPortal = {
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('✅ Ticket #' + ticketId + ' closed and archived!');
+                    alert('✅ Ticket #' + ticketId + ' closed!');
                     location.reload();
-                } else {
-                    alert('❌ Error: ' + (data.error || 'Failed to close'));
                 }
-            } catch (e) {
-                alert('⚠️ Error closing ticket: ' + e.message);
-            }
+            } catch (e) { alert(e.message); }
         }
     </script>
 </body>

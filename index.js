@@ -837,7 +837,7 @@ client.on('interactionCreate', async (interaction) => {
 // 🌐 HTTP Health Check Server (For Website / Uptime Pings)
 // ==========================================
 const PORT = process.env.SERVER_PORT || process.env.PORT || 26134 || 3000;
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
     // Enable CORS so your external website can fetch it
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -1090,14 +1090,12 @@ const server = http.createServer((req, res) => {
     if (pathname === '/staff') {
         const db = getDb();
         const data = db.getData();
+        const settings = await db.getTicketSettings();
         const allTickets = data.tickets || [];
         const activeTickets = allTickets.filter(t => t.status !== 'CLOSED' && t.status !== 'RESOLVED_BY_AI');
 
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        return res.end(WebPortal.renderStaffDashboard(true, activeTickets, {
-            totalTickets: allTickets.length,
-            avgWait: '< 2m'
-        }));
+        return res.end(WebPortal.renderStaffDashboard(true, activeTickets, allTickets, settings));
     }
 
     // 7.4. Staff Web Actions API (/api/staff/reply & /api/staff/close)
@@ -1148,6 +1146,234 @@ const server = http.createServer((req, res) => {
                 }
 
                 await db.addTicketNote(ticket.channel_id, 'WEB_OPERATOR', `[WEB REPLY]: ${text}`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // 7.4.1. Get Ticket Chat History for Web Drawer
+    if (pathname.startsWith('/api/staff/ticket/') && pathname.endsWith('/messages')) {
+        const ticketId = pathname.replace('/api/staff/ticket/', '').replace('/messages', '');
+        const db = getDb();
+        const ticket = await db.getTicketById(ticketId);
+        if (!ticket) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Ticket not found' }));
+        }
+
+        let messagesList = [];
+        if (ticket.channel_id) {
+            const ch = client.channels.cache.get(ticket.channel_id);
+            if (ch) {
+                try {
+                    const fetched = await ch.messages.fetch({ limit: 40 });
+                    messagesList = Array.from(fetched.values()).reverse().map(m => ({
+                        id: m.id,
+                        author: m.author.username,
+                        content: m.content || (m.embeds.length > 0 ? (m.embeds[0].description || '[Embed]') : '[Attachment]'),
+                        isStaff: m.author.id !== ticket.user_id,
+                        isAnon: m.author.bot,
+                        time: new Date(m.createdTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    }));
+                } catch (_) {}
+            }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+            success: true,
+            ticket,
+            messages: messagesList,
+            notes: ticket.notes || []
+        }));
+    }
+
+    // 7.4.2. Staff Internal Whisper from Web Drawer
+    if (pathname === '/api/staff/whisper' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { ticketId, text } = JSON.parse(body);
+                const db = getDb();
+                const ticket = await db.getTicketById(ticketId);
+                if (!ticket) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Ticket not found' }));
+                }
+
+                await db.addTicketNote(ticket.channel_id, 'WEB_STAFF', text);
+
+                if (ticket.channel_id) {
+                    const ch = client.channels.cache.get(ticket.channel_id);
+                    if (ch) {
+                        const { EmbedBuilder } = require('discord.js');
+                        const noteEmbed = new EmbedBuilder()
+                            .setAuthor({ name: '🔒 Staff Internal Whisper (Web Dashboard)' })
+                            .setDescription(text)
+                            .setColor(0xF1C40F)
+                            .setFooter({ text: 'Internal Staff Whisper • Not sent to customer DM' })
+                            .setTimestamp();
+                        await ch.send({ embeds: [noteEmbed] });
+                    }
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // 7.4.3. Update Configurable Support Wait Time & Auto-Update Discord Panel
+    if (pathname === '/api/staff/wait-time' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { waitTime } = JSON.parse(body);
+                const db = getDb();
+                await db.updateTicketSettings({ custom_wait_time: waitTime || null });
+
+                // Trigger Discord #support-center panel embed update immediately
+                const { buildTicketPanelEmbed } = require('./commands/ticket');
+                const primaryGuild = client.guilds.cache.get(config.guildId);
+                if (primaryGuild) {
+                    const supportChan = primaryGuild.channels.cache.get(config.channels.supportCenter);
+                    if (supportChan) {
+                        const recent = await supportChan.messages.fetch({ limit: 10 }).catch(() => null);
+                        const targetMsg = recent ? recent.find(m => m.author.id === client.user.id) : null;
+                        if (targetMsg) {
+                            const newEmbed = await buildTicketPanelEmbed(primaryGuild);
+                            await targetMsg.edit({ embeds: [newEmbed] }).catch(() => null);
+                        }
+                    }
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true, waitTime }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // 7.4.4. Set Ticket Priority
+    if (pathname === '/api/staff/priority' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { ticketId, priority } = JSON.parse(body);
+                const db = getDb();
+                const ticket = await db.getTicketById(ticketId);
+                if (!ticket) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Ticket not found' }));
+                }
+
+                ticket.priority = ['NORMAL', 'HIGH', 'URGENT'].includes(priority) ? priority : 'NORMAL';
+                db.save();
+
+                if (ticket.channel_id) {
+                    const ch = client.channels.cache.get(ticket.channel_id);
+                    if (ch) {
+                        const { EmbedBuilder } = require('discord.js');
+                        const pEmbed = new EmbedBuilder()
+                            .setTitle(`⭐ Priority Updated: ${ticket.priority}`)
+                            .setDescription(`This ModMail thread priority has been updated via the Staff Web Dashboard.`)
+                            .setColor(ticket.priority === 'URGENT' ? config.colors.danger : (ticket.priority === 'HIGH' ? config.colors.warning : config.colors.primary))
+                            .setTimestamp();
+                        await ch.send({ embeds: [pEmbed] });
+                    }
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true, priority: ticket.priority }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // 7.4.5. Transfer Ticket Department
+    if (pathname === '/api/staff/transfer' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { ticketId, category } = JSON.parse(body);
+                const db = getDb();
+                const ticket = await db.getTicketById(ticketId);
+                if (!ticket) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Ticket not found' }));
+                }
+
+                ticket.type = category;
+                db.save();
+
+                if (ticket.channel_id) {
+                    const ch = client.channels.cache.get(ticket.channel_id);
+                    if (ch) {
+                        const { EmbedBuilder } = require('discord.js');
+                        const tEmbed = new EmbedBuilder()
+                            .setTitle(`🔄 Department Transferred: ${category.toUpperCase()}`)
+                            .setDescription(`This ModMail thread has been reassigned to **${category.toUpperCase()}** via the Staff Web Dashboard.`)
+                            .setColor(config.colors.secondary)
+                            .setTimestamp();
+                        await ch.send({ embeds: [tEmbed] });
+                    }
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true, category }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // 7.4.6. 1-Click ModMail Blacklist
+    if (pathname === '/api/staff/blacklist' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { userId, reason } = JSON.parse(body);
+                const db = getDb();
+                await db.setTicketBlacklist(userId, 'WEB_STAFF', reason || 'Blacklisted via Staff Web Dashboard');
+
+                // Also close active ticket if any
+                const active = await db.getActiveUserTicket(userId);
+                if (active) {
+                    const { closeModmailThread } = require('./handlers/modmailHandler');
+                    const ch = client.channels.cache.get(active.channel_id);
+                    if (ch) {
+                        await closeModmailThread({
+                            channel: ch,
+                            ticket: active,
+                            closedByUser: client.user,
+                            reason: 'User Blacklisted: ' + (reason || 'Blacklisted via Web Dashboard'),
+                            client
+                        });
+                    }
+                }
+
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ success: true }));
             } catch (e) {

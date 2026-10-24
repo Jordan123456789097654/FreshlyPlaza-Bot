@@ -249,10 +249,10 @@ async function buildTicketPanelEmbed(guild) {
     }
     const activeStaffCount = Math.max(1, onlineStaffCount);
 
-    // Estimated wait calculation
-    let waitTimeText = '⚡ Instant (< 1 min)';
-    let footerEst = '~1m';
-    if (openTicketsWaiting > 0) {
+    // Estimated wait calculation (honors custom override from staff dashboard if configured)
+    let waitTimeText = settings.custom_wait_time || '⚡ Instant (< 1 min)';
+    let footerEst = settings.custom_wait_time || '~1m';
+    if (!settings.custom_wait_time && openTicketsWaiting > 0) {
         const estimatedMinutes = Math.max(1, Math.ceil((openTicketsWaiting * 4) / Math.max(1, activeStaffCount)));
         waitTimeText = estimatedMinutes <= 3 ? `⚡ ~${estimatedMinutes} mins (Very Fast)` : estimatedMinutes <= 10 ? `⏱️ ~${estimatedMinutes} mins (Normal)` : `⏳ ~${estimatedMinutes} mins (High Traffic)`;
         footerEst = `~${estimatedMinutes}m`;
