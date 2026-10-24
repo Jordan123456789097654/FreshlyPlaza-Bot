@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Partials, Collection, ActivityType, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, ActivityType, EmbedBuilder, REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -163,6 +163,34 @@ client.once('clientReady', async () => {
     setupAuditLogger(client);
 
     await initDatabase();
+
+    // Auto-sync / deploy slash commands with Discord API on startup
+    try {
+        const slashCommandsPayload = [];
+        for (const cmd of client.commands.values()) {
+            if (cmd.data && typeof cmd.data.toJSON === 'function') {
+                slashCommandsPayload.push(cmd.data.toJSON());
+            }
+        }
+        if (process.env.DISCORD_TOKEN && slashCommandsPayload.length > 0) {
+            const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+            const clientId = client.user.id;
+            
+            // Register to primary guild immediately (instant guild update, no 1-hour global cache delay)
+            if (config.guildId) {
+                await rest.put(Routes.applicationGuildCommands(clientId, config.guildId), { body: slashCommandsPayload });
+                console.log(`⚡ [AUTO-DEPLOY] Successfully synced ${slashCommandsPayload.length} slash commands to Guild (${config.guildId})`);
+            }
+            if (config.testGuildId) {
+                await rest.put(Routes.applicationGuildCommands(clientId, config.testGuildId), { body: slashCommandsPayload }).catch(() => null);
+            }
+            if (config.trustAndSafetyGuildId) {
+                await rest.put(Routes.applicationGuildCommands(clientId, config.trustAndSafetyGuildId), { body: slashCommandsPayload }).catch(() => null);
+            }
+        }
+    } catch (deployErr) {
+        console.warn('⚠️ [AUTO-DEPLOY] Could not auto-sync slash commands on startup:', deployErr.message);
+    }
 
     // Pre-cache guild members and presences across guilds
     for (const guild of client.guilds.cache.values()) {
