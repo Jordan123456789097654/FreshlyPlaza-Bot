@@ -402,7 +402,7 @@ async function handleStaffModmailMessage(message, client) {
                 .setTimestamp();
             await message.channel.send({ embeds: [noteEmbed] });
         }
-        return;
+        return true;
     }
 
     // 1.5. Staff Tag / Snippet command (!tag <tagKey> or !t <tagKey>)
@@ -414,7 +414,8 @@ async function handleStaffModmailMessage(message, client) {
         const { SUPPORT_TAGS } = require('../commands/ticket');
         const snippet = SUPPORT_TAGS[tagKey];
         if (!snippet) {
-            return message.channel.send(`⚠️ Unknown tag \`${tagKey}\`! Available tags: \`${Object.keys(SUPPORT_TAGS).join(', ')}\``);
+            await message.channel.send(`⚠️ Unknown tag \`${tagKey}\`! Available tags: \`${Object.keys(SUPPORT_TAGS).join(', ')}\``);
+            return true;
         }
 
         let targetUser = null;
@@ -423,7 +424,8 @@ async function handleStaffModmailMessage(message, client) {
         } catch (_) {}
 
         if (!targetUser) {
-            return message.channel.send('❌ Could not fetch user associated with this thread.');
+            await message.channel.send('❌ Could not fetch user associated with this thread.');
+            return true;
         }
 
         const shouldSendAnon = Boolean(ticket.anon_mode);
@@ -446,7 +448,8 @@ async function handleStaffModmailMessage(message, client) {
         try {
             await targetUser.send({ embeds: [dmSnippetEmbed] });
         } catch (e) {
-            return message.channel.send('⚠️ Could not deliver tag to customer DMs.');
+            await message.channel.send('⚠️ Could not deliver tag to customer DMs.');
+            return true;
         }
 
         const staffReceipt = new EmbedBuilder()
@@ -461,14 +464,14 @@ async function handleStaffModmailMessage(message, client) {
             .setTimestamp();
 
         await message.channel.send({ embeds: [staffReceipt] });
-        return;
+        return true;
     }
 
     // 2. Staff Close Command (!close [reason] or =close [reason])
     const isCloseCmd = /^(?:!close|=close)/i.test(rawContent);
     if (isCloseCmd) {
         const reason = rawContent.replace(/^(?:!close|=close)\s*/i, '').trim() || 'Resolved by staff in chat';
-        return closeModmailThread({
+        await closeModmailThread({
             channel: message.channel,
             ticket,
             closedBy: message.author,
@@ -476,6 +479,7 @@ async function handleStaffModmailMessage(message, client) {
             guild: message.guild,
             client
         });
+        return true;
     }
 
     // 3. Staff Reply (Relay to User DM)
@@ -491,14 +495,15 @@ async function handleStaffModmailMessage(message, client) {
     if (isExplicitSigned) cleanText = cleanText.replace(/^(?:!signed|=signed|=r)\s+/i, '').trim();
 
     // If message is a slash command or empty, ignore
-    if (cleanText.startsWith('/') || cleanText.length === 0) return;
+    if (cleanText.startsWith('/') || cleanText.length === 0) return false;
 
     // Fetch Target User
     let targetUser = null;
     try {
         targetUser = await client.users.fetch(ticket.user_id);
     } catch (_) {
-        return message.channel.send('❌ Could not find or fetch the user associated with this ModMail thread.');
+        await message.channel.send('❌ Could not find or fetch the user associated with this ModMail thread.');
+        return true;
     }
 
     // Prepare DM Embed
@@ -528,7 +533,8 @@ async function handleStaffModmailMessage(message, client) {
     try {
         await targetUser.send({ embeds: [dmEmbed], files });
     } catch (dmErr) {
-        return message.channel.send(`⚠️ **Failed to deliver DM to <@${ticket.user_id}>!** The user may have DMs closed or blocked the bot.`);
+        await message.channel.send(`⚠️ **Failed to deliver DM to <@${ticket.user_id}>!** The user may have DMs closed or blocked the bot.`);
+        return true;
     }
 
     // Delete staff raw message to keep channel tidy
@@ -556,6 +562,8 @@ async function handleStaffModmailMessage(message, client) {
     ticket.customer_warned_at = null;
     if (!ticket.first_response_at) ticket.first_response_at = new Date().toISOString();
     db.save();
+
+    return true;
 }
 
 /**

@@ -780,8 +780,10 @@ client.on('messageCreate', async (message) => {
     trackMessageForGhostPing(message);
     await handleHoneypotMessage(message);
     await handleGtnMessage(message);
-    await handleStaffModmailMessage(message, client);
-    await handleTicketChatMessage(message);
+    const wasHandledByModmail = await handleStaffModmailMessage(message, client);
+    if (!wasHandledByModmail) {
+        await handleTicketChatMessage(message);
+    }
     await handleDataEntriesMessage(message);
     await handleLoaPing(message);
 });
