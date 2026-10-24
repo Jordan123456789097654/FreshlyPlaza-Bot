@@ -1,4 +1,4 @@
-const { EmbedBuilder, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { EmbedBuilder, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const config = require('../config');
 const { getDb } = require('../database');
 const { syncMemberRobloxRoles } = require('../utils/robloxSync');
@@ -208,9 +208,208 @@ module.exports = [
             return interaction.editReply({ embeds: [embed] });
         }
     }
+    ,
+    {
+        data: new SlashCommandBuilder()
+            .setName('manual-verify')
+            .setDescription('Staff Command: Manually verify a Discord user with their Roblox account & assign roles')
+            .addUserOption(opt => opt.setName('user').setDescription('The Discord member to verify').setRequired(true))
+            .addStringOption(opt => opt.setName('username').setDescription('Their exact Roblox username or numeric ID').setRequired(true))
+            .addStringOption(opt => opt.setName('reason').setDescription('Reason for manual verification override').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+        async execute(interaction) {
+            const member = interaction.member;
+            const isAuthorized = member.permissions.has(PermissionFlagsBits.ManageRoles) ||
+                                member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+                                member.permissions.has(PermissionFlagsBits.Administrator) ||
+                                (config.roles.staff && member.roles.cache.has(config.roles.staff)) ||
+                                (config.roles.mr && member.roles.cache.has(config.roles.mr)) ||
+                                (config.roles.hr && member.roles.cache.has(config.roles.hr));
+
+            if (!isAuthorized) {
+                return interaction.reply({
+                    content: '🚫 You do not have permission to manually verify members. (Requires Staff / Manage Roles)',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            await interaction.deferReply();
+
+            const targetUser = interaction.options.getUser('user');
+            const targetUsernameInput = interaction.options.getString('username').trim();
+            const reason = interaction.options.getString('reason') || 'Manual verification by staff';
+
+            let targetMember = null;
+            try {
+                targetMember = await interaction.guild.members.fetch(targetUser.id);
+            } catch (_) {}
+
+            if (!targetMember) {
+                return interaction.editReply({ content: '❌ Could not find that user in this Discord server.' });
+            }
+
+            let robloxUser = null;
+            if (/^\d+$/.test(targetUsernameInput)) {
+                try {
+                    const res = await fetch('https://users.roblox.com/v1/users/' + targetUsernameInput, {
+                        headers: { 'User-Agent': 'GrandwayVerificationBot' },
+                        signal: AbortSignal.timeout(5000)
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        robloxUser = { id: data.id, name: data.name };
+                    }
+                } catch (_) {}
+            }
+
+            if (!robloxUser) {
+                robloxUser = await resolveRobloxUser(targetUsernameInput).catch(() => null);
+            }
+
+            if (!robloxUser) {
+                return interaction.editReply({
+                    content: `❌ Could not locate a Roblox account matching **${targetUsernameInput}**. Please verify spelling or numeric Roblox ID.`
+                });
+            }
+
+            const robloxId = robloxUser.id;
+            const robloxUsername = robloxUser.name;
+
+            const [{ rankNumber, rankName }, userDetails] = await Promise.all([
+                fetchRobloxGroupRank(robloxId, config.robloxGroupId),
+                fetchRobloxUserBio(robloxId).catch(() => null)
+            ]);
+
+            const db = getDb();
+            await db.setVerification(targetUser.id, robloxId, robloxUsername);
+
+            pendingVerifications.delete(targetUser.id);
+
+            await syncMemberRobloxRoles(targetMember, rankNumber, rankName);
+            try {
+                await targetMember.setNickname(`${robloxUsername} (${rankName})`);
+            } catch (e) {
+                console.warn('[MANUAL-VERIFY] Nickname update skipped:', e.message);
+            }
+
+            const hierarchyData = require('../utils/robloxSync').hierarchyData;
+            const assignedRoleMentions = [];
+            if (hierarchyData && hierarchyData.rankToRoleId && hierarchyData.rankToRoleId[String(rankNumber)]) {
+                assignedRoleMentions.push(`<@&${hierarchyData.rankToRoleId[String(rankNumber)]}>`);
+            }
+            if (rankNumber >= 250 && config.roles.cSuite) assignedRoleMentions.push(`<@&${config.roles.cSuite}>`);
+            if (rankNumber >= 100 && config.roles.hr) assignedRoleMentions.push(`<@&${config.roles.hr}>`);
+            if (rankNumber >= 30 && config.roles.mr) assignedRoleMentions.push(`<@&${config.roles.mr}>`);
+            if (rankNumber >= 10 && config.roles.staff) assignedRoleMentions.push(`<@&${config.roles.staff}>`);
+            if (config.roles.verified) assignedRoleMentions.push(`<@&${config.roles.verified}>`);
+            if (config.roles.customer) assignedRoleMentions.push(`<@&${config.roles.customer}>`);
+
+            const displayRolesText = assignedRoleMentions.length > 0
+                ? [...new Set(assignedRoleMentions)].join(' • ')
+                : `<@&${config.roles.verified}> • <@&${config.roles.customer}>`;
+
+            const successEmbed = new EmbedBuilder()
+                .setTitle('✅ Member Manually Verified')
+                .setDescription(`Successfully linked <@${targetUser.id}> to Roblox account **${robloxUsername}**!`)
+                .addFields(
+                    { name: '👤 Discord Member', value: `<@${targetUser.id}> (\`${targetUser.id}\`)`, inline: true },
+                    { name: '🎮 Roblox Profile', value: `[${robloxUsername}](https://www.roblox.com/users/${robloxId}/profile) (\`${robloxId}\`)`, inline: true },
+                    { name: '🏬 Group Rank', value: `**${rankName}** (Rank ${rankNumber})`, inline: true },
+                    { name: '🏷️ Assigned Roles', value: displayRolesText, inline: false },
+                    { name: '👮 Verified By', value: `<@${interaction.user.id}>`, inline: true },
+                    { name: '📝 Reason / Note', value: reason, inline: true }
+                )
+                .setColor(config.colors.primary)
+                .setThumbnail(`https://www.roblox.com/headshot-thumbnail/image?userId=${robloxId}&width=150&height=150&format=png`)
+                .setFooter({ text: 'Grandway Shopping Staff Verification Override' })
+                .setTimestamp();
+
+            try {
+                const dmEmbed = new EmbedBuilder()
+                    .setTitle('🎉 You have been verified!')
+                    .setDescription(`A staff member (<@${interaction.user.id}>) has manually verified your account in **${interaction.guild.name}**!`)
+                    .addFields(
+                        { name: '🎮 Linked Roblox Account', value: `**${robloxUsername}** (\`${robloxId}\`)`, inline: true },
+                        { name: '🏬 Synced Group Rank', value: `**${rankName}** (Rank ${rankNumber})`, inline: true },
+                        { name: '📝 Reason', value: reason, inline: false }
+                    )
+                    .setColor(config.colors.primary)
+                    .setTimestamp();
+                await targetUser.send({ embeds: [dmEmbed] });
+            } catch (_) {}
+
+            return interaction.editReply({ embeds: [successEmbed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('unverify')
+            .setDescription('Staff Command: Remove Roblox verification link and remove verified roles from a member')
+            .addUserOption(opt => opt.setName('user').setDescription('The Discord member to unverify').setRequired(true))
+            .addStringOption(opt => opt.setName('reason').setDescription('Reason for unverification').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+        async execute(interaction) {
+            const member = interaction.member;
+            const isAuthorized = member.permissions.has(PermissionFlagsBits.ManageRoles) ||
+                                member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+                                member.permissions.has(PermissionFlagsBits.Administrator) ||
+                                (config.roles.mr && member.roles.cache.has(config.roles.mr)) ||
+                                (config.roles.hr && member.roles.cache.has(config.roles.hr));
+
+            if (!isAuthorized) {
+                return interaction.reply({
+                    content: '🚫 You do not have permission to unverify members. (Requires MR / HR / Manage Roles)',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            await interaction.deferReply();
+            const targetUser = interaction.options.getUser('user');
+            const reason = interaction.options.getString('reason') || 'Unverified by staff';
+
+            const db = getDb();
+            const existing = await db.removeVerification(targetUser.id);
+            if (!existing) {
+                return interaction.editReply({ content: `⚠️ <@${targetUser.id}> is not currently verified in the database.` });
+            }
+
+            let targetMember = null;
+            try {
+                targetMember = await interaction.guild.members.fetch(targetUser.id);
+            } catch (_) {}
+
+            if (targetMember) {
+                const rolesToRemove = [];
+                if (config.roles.verified && targetMember.roles.cache.has(config.roles.verified)) rolesToRemove.push(config.roles.verified);
+                if (config.roles.customer && targetMember.roles.cache.has(config.roles.customer)) rolesToRemove.push(config.roles.customer);
+
+                if (config.roles.unverified && !targetMember.roles.cache.has(config.roles.unverified)) {
+                    await targetMember.roles.add(config.roles.unverified).catch(() => null);
+                }
+                if (rolesToRemove.length > 0) {
+                    await targetMember.roles.remove(rolesToRemove).catch(() => null);
+                }
+            }
+
+            const unverifyEmbed = new EmbedBuilder()
+                .setTitle('🔓 Member Unverified')
+                .setDescription(`Successfully unlinked verification records for <@${targetUser.id}>.`)
+                .addFields(
+                    { name: 'Discord Member', value: `<@${targetUser.id}>`, inline: true },
+                    { name: 'Previous Roblox', value: `**${existing.roblox_username}** (\`${existing.roblox_id}\`)`, inline: true },
+                    { name: 'Staff Action By', value: `<@${interaction.user.id}>`, inline: true },
+                    { name: 'Reason', value: reason, inline: false }
+                )
+                .setColor(config.colors.warning)
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [unverifyEmbed] });
+        }
+    }
 ];
 
 module.exports.pendingVerifications = pendingVerifications;
 module.exports.fetchRobloxUserBio = fetchRobloxUserBio;
 module.exports.fetchRobloxGroupRank = fetchRobloxGroupRank;
 module.exports.startVerificationProcess = startVerificationProcess;
+module.exports.resolveRobloxUser = resolveRobloxUser;

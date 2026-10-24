@@ -156,9 +156,25 @@ const db = {
 
     // Verification helpers
     async setVerification(userId, robloxId, robloxUsername) {
+        if (!dbData.verifications) dbData.verifications = {};
         dbData.verifications[userId] = { roblox_id: robloxId, roblox_username: robloxUsername, verified_at: new Date().toISOString() };
         saveDb();
         return dbData.verifications[userId];
+    },
+
+    async removeVerification(userId) {
+        if (dbData.verifications && dbData.verifications[userId]) {
+            const removed = dbData.verifications[userId];
+            delete dbData.verifications[userId];
+            saveDb();
+            return removed;
+        }
+        return null;
+    },
+
+    async getVerification(userId) {
+        if (!dbData.verifications) dbData.verifications = {};
+        return dbData.verifications[userId] || null;
     },
 
     // Staff Profile & Probation Helpers
