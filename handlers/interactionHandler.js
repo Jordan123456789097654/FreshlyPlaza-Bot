@@ -23,6 +23,62 @@ async function handleInteraction(interaction) {
     const db = getDb();
 
     // 1. BUTTON INTERACTIONS
+    // Music Player Interactive Controls
+    if (interaction.isButton() && interaction.customId.startsWith('btn_music_')) {
+        const musicManager = require('../utils/musicManager');
+        const { buildMusicControlRow, buildQueueEmbed } = require('../utils/musicUtils');
+        const queue = musicManager.getQueue(interaction.guildId);
+
+        if (!queue || (!queue.currentTrack && queue.queue.length === 0)) {
+            return interaction.reply({ content: '⚠️ No music is currently active in this server.', flags: MessageFlags.Ephemeral });
+        }
+
+        const voiceChannel = interaction.member.voice.channel;
+        if (!voiceChannel || (queue.voiceChannelId && voiceChannel.id !== queue.voiceChannelId)) {
+            return interaction.reply({ content: '🔊 You must be in the same voice channel as the bot to control playback!', flags: MessageFlags.Ephemeral });
+        }
+
+        const action = interaction.customId.replace('btn_music_', '');
+        if (action === 'toggle_pause') {
+            const isPaused = queue.player.state.status === 'paused';
+            if (isPaused) {
+                queue.resume();
+                await interaction.update({ components: [buildMusicControlRow(queue)] });
+            } else {
+                queue.pause();
+                await interaction.update({ components: [buildMusicControlRow(queue)] });
+            }
+            return;
+        }
+
+        if (action === 'skip') {
+            const skipped = queue.skip();
+            if (skipped) {
+                return interaction.reply({ content: `⏭️ Skipped by <@${interaction.user.id}>: **${skipped.title}**` });
+            } else {
+                return interaction.reply({ content: '⚠️ Nothing to skip.', flags: MessageFlags.Ephemeral });
+            }
+        }
+
+        if (action === 'stop') {
+            queue.stop();
+            return interaction.reply({ content: `⏹️ Playback stopped and queue cleared by <@${interaction.user.id}>.` });
+        }
+
+        if (action === 'loop') {
+            const nextMode = queue.loopMode === 'off' ? 'track' : (queue.loopMode === 'track' ? 'queue' : 'off');
+            queue.loopMode = nextMode;
+            const labels = { off: 'Off', track: 'Single Track', queue: 'Entire Queue' };
+            await interaction.update({ components: [buildMusicControlRow(queue)] });
+            return interaction.followUp({ content: `🔁 Loop mode set to: **${labels[nextMode]}**`, flags: MessageFlags.Ephemeral });
+        }
+
+        if (action === 'show_queue') {
+            const queueEmbed = buildQueueEmbed(queue, 1);
+            return interaction.reply({ embeds: [queueEmbed], flags: MessageFlags.Ephemeral });
+        }
+    }
+
     // DM ModMail Close Button
     if (interaction.isButton() && interaction.customId.startsWith('btn_modmail_dm_close_')) {
         await interaction.deferReply();
@@ -46,6 +102,64 @@ async function handleInteraction(interaction) {
         });
 
         return interaction.editReply({ content: '🔒 ModMail thread closed. Thank you for contacting Grandway Shopping!' });
+    }
+
+    // Music Search Result Selection
+    if (interaction.isStringSelectMenu() && interaction.customId === 'select_music_search_result') {
+        const music = require('../commands/music');
+        const musicManager = require('../utils/musicManager');
+        const selectedValue = interaction.values[0];
+        const lastUnderscore = selectedValue.lastIndexOf('_');
+        const sessionId = selectedValue.slice(0, lastUnderscore);
+        const trackIndex = parseInt(selectedValue.slice(lastUnderscore + 1), 10);
+
+        const session = music.searchSessions ? music.searchSessions.get(sessionId) : null;
+        if (!session || !session.tracks || !session.tracks[trackIndex]) {
+            return interaction.reply({
+                content: '⚠️ This search session has expired. Please run `/play` again.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        if (interaction.user.id !== session.userId) {
+            return interaction.reply({
+                content: '❌ Only the member who requested the search can choose a song.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const track = session.tracks[trackIndex];
+        const queue = musicManager.getQueue(interaction.guildId);
+        queue.connect(session.voiceChannel, session.textChannel);
+
+        await interaction.deferUpdate();
+
+        if (queue.isPlaying || queue.currentTrack) {
+            queue.queue.push(track);
+            const embed = new EmbedBuilder()
+                .setTitle('🎵 Track Added to Queue')
+                .setDescription(`[**${track.title}**](${track.url})`)
+                .addFields(
+                    { name: '🎤 Artist / Channel', value: track.author || 'Unknown', inline: true },
+                    { name: '⏱️ Duration', value: track.duration, inline: true },
+                    { name: '📍 Position in Queue', value: `#${queue.queue.length}`, inline: true }
+                )
+                .setColor(config.colors.secondary)
+                .setThumbnail(track.thumbnail)
+                .setFooter({ text: `Requested by ${interaction.user.username}` })
+                .setTimestamp();
+
+            await interaction.editReply({ content: '✅ Track selected!', embeds: [embed], components: [] });
+        } else {
+            await interaction.editReply({
+                content: `🎶 Selected **${track.title}**! Starting playback...`,
+                components: []
+            });
+            queue.playTrack(track);
+        }
+
+        music.searchSessions.delete(sessionId);
+        return;
     }
 
     // DM ModMail Category Select Menu

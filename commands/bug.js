@@ -217,29 +217,6 @@ module.exports = [
             });
         }
     },
-    {
-        data: new SlashCommandBuilder()
-            .setName('bug-report')
-            .setDescription('Alias for /bug to submit a bug report')
-            .addStringOption(opt => opt.setName('title').setDescription('Short bug title / summary').setRequired(true))
-            .addStringOption(opt => opt.setName('details').setDescription('Detailed description of what occurred').setRequired(true))
-            .addStringOption(opt =>
-                opt.setName('severity')
-                    .setDescription('Bug severity level')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: '🔴 Critical / Game-Breaking', value: 'critical' },
-                        { name: '🟡 Moderate Glitch', value: 'moderate' },
-                        { name: '🟢 Minor / Visual Bug', value: 'minor' }
-                    )
-            )
-            .addStringOption(opt => opt.setName('steps').setDescription('Steps to reproduce').setRequired(false))
-            .addStringOption(opt => opt.setName('evidence').setDescription('Screenshot or video links').setRequired(false)),
-        async execute(interaction) {
-            // Forward to main execute
-            return module.exports[0].execute(interaction);
-        }
-    }
 ];
 
 module.exports.buildBugEmbed = buildBugEmbed;

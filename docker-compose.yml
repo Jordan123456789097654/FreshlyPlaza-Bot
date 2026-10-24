@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: grandway-discord-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "26134:26134"
+    volumes:
+      - ./freshlyplaza_db.json:/app/freshlyplaza_db.json
+    environment:
+      - NODE_ENV=production

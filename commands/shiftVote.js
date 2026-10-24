@@ -31,102 +31,100 @@ function buildVoteButtons(vote) {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId(`shift_vote_yes_${vote.id}`)
-            .setLabel(`🟢 Yes, Host Shift! (${yesCount})`)
+            .setLabel(`🟢 YES (${yesCount})`)
             .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
             .setCustomId(`shift_vote_no_${vote.id}`)
-            .setLabel(`🔴 No / Not Now (${noCount})`)
+            .setLabel(`🔴 NO (${noCount})`)
             .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
-            .setCustomId(`shift_vote_view_voters_${vote.id}`)
-            .setLabel('👥 View Voters')
-            .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId(`shift_vote_end_${vote.id}`)
-            .setLabel('🛑 End Vote')
+            .setCustomId(`shift_vote_cancel_${vote.id}`)
+            .setLabel('❌ Cancel Vote')
             .setStyle(ButtonStyle.Secondary)
     );
 }
 
-function formatStaffRoster(staffStations) {
-    if (!staffStations || Object.keys(staffStations).length === 0) {
-        return '*No staff have claimed stations yet. Click a button below!*';
-    }
-    const stations = {
-        'Self-Checkouts': '💳 Self-Checkouts',
-        'Manual Checkouts': '🛒 Manual Checkouts',
-        'Restocking': '📦 Restocking',
-        'Security': '🛡️ Security',
-        'Customer Service': '🏪 Customer Service'
-    };
-    const lines = [];
-    for (const [stKey, stLabel] of Object.entries(stations)) {
-        const users = Object.entries(staffStations)
-            .filter(([_, s]) => s === stKey)
-            .map(([uid, _]) => `<@${uid}>`);
-        if (users.length > 0) {
-            lines.push(`• **${stLabel}** (${users.length}): ${users.join(', ')}`);
-        }
-    }
-    return lines.join('\n') || '*No staff have claimed stations yet.*';
-}
-
-function buildStaffStationEmbed(vote, hostUser, guild) {
-    const rosterText = formatStaffRoster(vote.staff_stations);
-    const totalStaff = vote.staff_stations ? Object.keys(vote.staff_stations).length : 0;
-
-    const embed = new EmbedBuilder()
-        .setTitle('🧑‍💼 Grandway Shopping — Shift Staffing & Station Roster')
-        .setDescription(`A store shift community vote (**Vote #${vote.id}**) has been initiated by ${hostUser ? `<@${hostUser.id}>` : `<@${vote.host_id}>`}!\n\n**Can you join this upcoming shift?**\nSelect your station below so management can ensure complete store coverage:`)
-        .addFields(
-            { name: '👤 Shift Host', value: hostUser ? `<@${hostUser.id}>` : `<@${vote.host_id}>`, inline: true },
-            { name: '📍 Community Vote', value: `<#${vote.channel_id}>`, inline: true },
-            { name: '👥 Staff Attending', value: `**${totalStaff}** staff signed up`, inline: true },
-            { name: '📋 Department Stations', value: '• **💳 Self-Checkouts (SCO)**: Monitoring automated registers\n• **🛒 Manual Checkouts**: Operating register belts & bagging\n• **📦 Restocking**: Refilling grocery aisles & bakery items\n• **🛡️ Security**: Store entrance, aisle patrols & anti-trolling\n• **🏪 Customer Service**: Customer returns & help desk', inline: false },
-            { name: '📋 Current Station Roster', value: rosterText.slice(0, 1024), inline: false }
-        )
-        .setColor(config.colors.secondary)
-        .setFooter({ text: `Vote ID: #${vote.id} • Grandway Shopping Staff Operations`, iconURL: guild ? guild.iconURL() : null })
-        .setTimestamp();
-
-    return embed;
-}
-
 function buildStaffStationButtons(vote) {
-    const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`shift_station_sco_${vote.id}`).setLabel('💳 Self-Checkouts').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`shift_station_manual_${vote.id}`).setLabel('🛒 Manual Checkouts').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`shift_station_restock_${vote.id}`).setLabel('📦 Restocking').setStyle(ButtonStyle.Primary)
-    );
+    const stations = [
+        { id: 'checkout', label: 'Cashier / Till', emoji: '💳' },
+        { id: 'greggs', label: 'Greggs Counter', emoji: '🥐' },
+        { id: 'security', label: 'Loss Prevention', emoji: '🛡️' },
+        { id: 'restock', label: 'Restocker / Aisle', emoji: '📦' }
+    ];
+
+    const row1 = new ActionRowBuilder();
+    stations.forEach(s => {
+        row1.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`shift_station_${vote.id}_${s.id}`)
+                .setLabel(s.label)
+                .setEmoji(s.emoji)
+                .setStyle(ButtonStyle.Primary)
+        );
+    });
 
     const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`shift_station_security_${vote.id}`).setLabel('🛡️ Security').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`shift_station_cs_${vote.id}`).setLabel('🏪 Customer Service').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`shift_station_leave_${vote.id}`).setLabel('❌ Step Down').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder()
+            .setCustomId(`shift_station_leave_${vote.id}`)
+            .setLabel('Step Down from Station')
+            .setStyle(ButtonStyle.Secondary)
     );
 
     return [row1, row2];
 }
 
-async function concludeShiftVote(vote, guild, concludedBy = null) {
+function formatStaffRoster(stationsObj = {}) {
+    const stationNames = {
+        checkout: '💳 Cashier / Till',
+        greggs: '🥐 Greggs Counter',
+        security: '🛡️ Loss Prevention',
+        restock: '📦 Restocker / Aisle'
+    };
+
+    const lines = [];
+    for (const [key, label] of Object.entries(stationNames)) {
+        const staffList = stationsObj[key] && stationsObj[key].length > 0
+            ? stationsObj[key].map(id => `<@${id}>`).join(', ')
+            : '*None signed up*';
+        lines.push(`> **${label}:** ${staffList}`);
+    }
+    return lines.join('\n');
+}
+
+function buildStaffStationEmbed(vote, hostUser, guild) {
+    const roster = formatStaffRoster(vote.staff_stations);
+    const expiresTimestamp = Math.floor(new Date(vote.expires_at).getTime() / 1000);
+
+    return new EmbedBuilder()
+        .setTitle('👔 Shift Station Sign-Up & Staff Check-In')
+        .setDescription(`A store shift vote has been opened by <@${vote.host_id}>! Staff colleagues are needed to operate departments if the vote passes.\n\nClick a station button below to claim your operational post for this shift!`)
+        .addFields(
+            { name: '👤 Proposed Shift Host', value: `<@${vote.host_id}>`, inline: true },
+            { name: '⏳ Vote Deadline', value: `<t:${expiresTimestamp}:R>`, inline: true },
+            { name: '📋 Department Stations', value: roster, inline: false }
+        )
+        .setColor(config.colors.primary)
+        .setFooter({ text: `Shift Vote #${vote.id} Station Roster`, iconURL: guild ? guild.iconURL() : null })
+        .setTimestamp();
+}
+
+async function concludeShiftVote(vote, guild, concludedBy = 'SYSTEM') {
+    const db = getDb();
     if (!vote || vote.status !== 'ACTIVE') return;
 
-    const db = getDb();
     const yesCount = vote.upvotes ? vote.upvotes.length : 0;
     const noCount = vote.downvotes ? vote.downvotes.length : 0;
     const target = vote.target_votes || 5;
 
-    const passed = yesCount >= target || (yesCount > noCount && yesCount > 0);
+    const passed = yesCount >= target || (yesCount > noCount && yesCount >= 3);
     vote.status = passed ? 'PASSED' : 'FAILED';
     vote.concluded_at = new Date().toISOString();
     vote.concluded_by = concludedBy;
     db.save();
 
     const channel = guild.channels.cache.get(vote.channel_id);
-    if (!channel) return;
-
-    let message;
-    if (vote.message_id) {
+    let message = null;
+    if (channel && vote.message_id) {
         try {
             message = await channel.messages.fetch(vote.message_id);
         } catch (e) {}
@@ -135,14 +133,14 @@ async function concludeShiftVote(vote, guild, concludedBy = null) {
     if (passed) {
         const passEmbed = new EmbedBuilder()
             .setTitle('🎉 Grandway Shopping — Shift Vote PASSED!')
-            .setDescription(`The community has voted **YES** to hosting a store shift!\n\n**Final Tally:** 🟢 **${yesCount} YES** vs 🔴 **${noCount} NO**\n**Shift Host:** <@${vote.host_id}>\n\nThe store will be opening shortly! Prepare your aprons and head on down!`)
+            .setDescription(`The community has spoken! Store shift has reached the required goal.\n\n**Final Tally:** 🟢 **${yesCount} YES** vs 🔴 **${noCount} NO**\n\nShift will now begin under <@${vote.host_id}>. Prepare your uniforms and hop into the store!`)
             .setColor(config.colors.primary)
             .setFooter({ text: `Vote ID: #${vote.id} • Grandway Shopping Operations`, iconURL: guild.iconURL() })
             .setTimestamp();
 
         const joinRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setLabel('🛒 Join Grandway Shopping Store')
+                .setLabel('🛒 Join Grandway Shopping')
                 .setStyle(ButtonStyle.Link)
                 .setURL(config.robloxGameLink)
         );
@@ -153,7 +151,6 @@ async function concludeShiftVote(vote, guild, concludedBy = null) {
             } catch (e) {}
         }
 
-        // Send public announcement
         await channel.send({
             content: `<@&${config.roles.shiftPing}> 🎉 **THE SHIFT VOTE HAS PASSED!**\nWith **${yesCount} YES votes**, <@${vote.host_id}> will be hosting a store shift shortly!\n👉 [Click here to join Grandway Shopping](${config.robloxGameLink})`
         });
@@ -172,7 +169,6 @@ async function concludeShiftVote(vote, guild, concludedBy = null) {
         }
     }
 
-    // Update Staff Announcement Message in #staff-announcements if present
     const staffAnnounceChannel = guild.channels.cache.get(config.channels.staffAnnouncements);
     if (staffAnnounceChannel && vote.staff_message_id) {
         try {
@@ -201,197 +197,203 @@ const commands = [
     {
         data: new SlashCommandBuilder()
             .setName('shift-vote')
-            .setDescription('Start a community vote to decide if a store shift should be hosted')
-            .addIntegerOption(opt => 
-                opt.setName('duration')
-                    .setDescription('Duration in minutes for the vote (default: 15, max: 120)')
-                    .setRequired(false)
-                    .setMinValue(1)
-                    .setMaxValue(120)
+            .setDescription('Community voting system to decide if a store shift should be hosted')
+            .addSubcommand(sub =>
+                sub.setName('start')
+                    .setDescription('Start a community vote to decide if a store shift should be hosted')
+                    .addIntegerOption(opt => 
+                        opt.setName('duration')
+                            .setDescription('Duration in minutes for the vote (default: 15, max: 120)')
+                            .setRequired(false)
+                            .setMinValue(1)
+                            .setMaxValue(120)
+                    )
+                    .addIntegerOption(opt => 
+                        opt.setName('target')
+                            .setDescription('Target YES votes needed to pass early (default: 5)')
+                            .setRequired(false)
+                            .setMinValue(1)
+                    )
+                    .addBooleanOption(opt => 
+                        opt.setName('ping')
+                            .setDescription('Whether to ping the Shift Ping role (default: True)')
+                            .setRequired(false)
+                    )
             )
-            .addIntegerOption(opt => 
-                opt.setName('target')
-                    .setDescription('Target YES votes needed to pass early (default: 5)')
-                    .setRequired(false)
-                    .setMinValue(1)
+            .addSubcommand(sub =>
+                sub.setName('end')
+                    .setDescription('Conclude the active store shift vote early and tally the results')
             )
-            .addBooleanOption(opt => 
-                opt.setName('ping')
-                    .setDescription('Whether to ping the Shift Ping role (default: True)')
-                    .setRequired(false)
+            .addSubcommand(sub =>
+                sub.setName('status')
+                    .setDescription('View live progress and tally of the active store shift vote')
+            )
+            .addSubcommand(sub =>
+                sub.setName('voters')
+                    .setDescription('View the users who voted YES and NO for a store shift')
+                    .addIntegerOption(opt => 
+                        opt.setName('id')
+                            .setDescription('Shift Vote ID (Optional, defaults to active or latest vote)')
+                            .setRequired(false)
+                    )
             ),
         async execute(interaction) {
-            const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) || 
-                            member.roles.cache.has(config.roles.mr) || 
-                            member.roles.cache.has(config.roles.hr) || 
-                            member.permissions.has('ManageGuild');
+            const sub = interaction.options.getSubcommand();
 
-            if (!isStaff) {
-                return interaction.reply({ content: '❌ You must be a Grandway Shopping staff member to initiate a store shift vote.', ephemeral: true });
-            }
+            if (sub === 'start') {
+                const member = interaction.member;
+                const isStaff = member.roles.cache.has(config.roles.staff) || 
+                                member.roles.cache.has(config.roles.mr) || 
+                                member.roles.cache.has(config.roles.hr) || 
+                                member.permissions.has('ManageGuild');
 
-            const db = getDb();
-            const activeVote = await db.getActiveShiftVote();
-            if (activeVote) {
+                if (!isStaff) {
+                    return interaction.reply({ content: '❌ You must be a Grandway Shopping staff member to initiate a store shift vote.', ephemeral: true });
+                }
+
+                const db = getDb();
+                const activeVote = await db.getActiveShiftVote();
+                if (activeVote) {
+                    return interaction.reply({ 
+                        content: `❌ There is already an active shift vote in progress (**Vote #${activeVote.id}**) in <#${activeVote.channel_id}>!\nPlease wait for it to finish or conclude it with \`/shift-vote end\`.`, 
+                        ephemeral: true 
+                    });
+                }
+
+                const duration = interaction.options.getInteger('duration') || 15;
+                const target = interaction.options.getInteger('target') || 5;
+                const ping = interaction.options.getBoolean('ping') ?? true;
+
+                const shiftsChannel = interaction.guild.channels.cache.get(config.channels.shifts) || interaction.channel;
+
+                const vote = await db.addShiftVote(interaction.user.id, shiftsChannel.id, duration, target);
+
+                const embed = buildVoteEmbed(vote, interaction.user, interaction.guild);
+                const row = buildVoteButtons(vote);
+
+                const content = ping && config.roles.shiftPing 
+                    ? `<@&${config.roles.shiftPing}> 📢 **COMMUNITY STORE SHIFT VOTE STARTED!**` 
+                    : null;
+
+                const msg = await shiftsChannel.send({
+                    content: content,
+                    embeds: [embed],
+                    components: [row]
+                });
+
+                vote.message_id = msg.id;
+                db.save();
+
+                const staffAnnounceChannel = interaction.guild.channels.cache.get(config.channels.staffAnnouncements);
+                if (staffAnnounceChannel) {
+                    try {
+                        const staffEmbed = buildStaffStationEmbed(vote, interaction.user, interaction.guild);
+                        const staffRows = buildStaffStationButtons(vote);
+                        const staffPing = config.roles.staff ? `<@&${config.roles.staff}>` : '';
+                        const staffMsg = await staffAnnounceChannel.send({
+                            content: `${staffPing} 📢 **UPCOMING STORE SHIFT: STAFFING & STATION CHECK!**`,
+                            embeds: [staffEmbed],
+                            components: staffRows
+                        });
+                        vote.staff_message_id = staffMsg.id;
+                        db.save();
+                    } catch (e) {
+                        console.error('[SHIFT VOTE] Error sending staff station request:', e);
+                    }
+                }
+
+                setTimeout(async () => {
+                    const currentVote = await db.getShiftVote(vote.id);
+                    if (currentVote && currentVote.status === 'ACTIVE') {
+                        await concludeShiftVote(currentVote, interaction.guild, 'Automated Timer');
+                    }
+                }, duration * 60 * 1000);
+
                 return interaction.reply({ 
-                    content: `❌ There is already an active shift vote in progress (**Vote #${activeVote.id}**) in <#${activeVote.channel_id}>!\nPlease wait for it to finish or conclude it with \`/shift-vote-end\`.`, 
+                    content: `✅ Shift Vote **#${vote.id}** initiated in <#${shiftsChannel.id}> for **${duration} minutes** (Target: **${target} YES votes**)!`, 
                     ephemeral: true 
                 });
             }
 
-            const duration = interaction.options.getInteger('duration') || 15;
-            const target = interaction.options.getInteger('target') || 5;
-            const ping = interaction.options.getBoolean('ping') ?? true;
+            if (sub === 'end') {
+                const member = interaction.member;
+                const isStaff = member.roles.cache.has(config.roles.staff) || 
+                                member.roles.cache.has(config.roles.mr) || 
+                                member.roles.cache.has(config.roles.hr) || 
+                                member.permissions.has('ManageGuild');
 
-            const shiftsChannel = interaction.guild.channels.cache.get(config.channels.shifts) || interaction.channel;
-
-            const vote = await db.addShiftVote(interaction.user.id, shiftsChannel.id, duration, target);
-
-            const embed = buildVoteEmbed(vote, interaction.user, interaction.guild);
-            const row = buildVoteButtons(vote);
-
-            const content = ping && config.roles.shiftPing 
-                ? `<@&${config.roles.shiftPing}> 📢 **COMMUNITY STORE SHIFT VOTE STARTED!**` 
-                : null;
-
-            const msg = await shiftsChannel.send({
-                content: content,
-                embeds: [embed],
-                components: [row]
-            });
-
-            vote.message_id = msg.id;
-            db.save();
-
-            // Send Staffing & Station Roster request to #staff-announcements
-            const staffAnnounceChannel = interaction.guild.channels.cache.get(config.channels.staffAnnouncements);
-            if (staffAnnounceChannel) {
-                try {
-                    const staffEmbed = buildStaffStationEmbed(vote, interaction.user, interaction.guild);
-                    const staffRows = buildStaffStationButtons(vote);
-                    const staffPing = config.roles.staff ? `<@&${config.roles.staff}>` : '';
-                    const staffMsg = await staffAnnounceChannel.send({
-                        content: `${staffPing} 📢 **UPCOMING STORE SHIFT: STAFFING & STATION CHECK!**`,
-                        embeds: [staffEmbed],
-                        components: staffRows
-                    });
-                    vote.staff_message_id = staffMsg.id;
-                    db.save();
-                } catch (e) {
-                    console.error('[SHIFT VOTE] Error sending staff station request:', e);
+                if (!isStaff) {
+                    return interaction.reply({ content: '❌ You must be a staff member to conclude a shift vote.', ephemeral: true });
                 }
-            }
 
-            // Set auto-conclude timer
-            setTimeout(async () => {
-                const currentVote = await db.getShiftVote(vote.id);
-                if (currentVote && currentVote.status === 'ACTIVE') {
-                    await concludeShiftVote(currentVote, interaction.guild, 'Automated Timer');
+                const db = getDb();
+                const activeVote = await db.getActiveShiftVote();
+                if (!activeVote) {
+                    return interaction.reply({ content: '❌ There is no active shift vote to conclude.', ephemeral: true });
                 }
-            }, duration * 60 * 1000);
 
-            return interaction.reply({ 
-                content: `✅ Shift Vote **#${vote.id}** initiated in <#${shiftsChannel.id}> for **${duration} minutes** (Target: **${target} YES votes**)!`, 
-                ephemeral: true 
-            });
-        }
-    },
-    {
-        data: new SlashCommandBuilder()
-            .setName('shift-vote-end')
-            .setDescription('Conclude the active store shift vote early and tally the results'),
-        async execute(interaction) {
-            const member = interaction.member;
-            const isStaff = member.roles.cache.has(config.roles.staff) || 
-                            member.roles.cache.has(config.roles.mr) || 
-                            member.roles.cache.has(config.roles.hr) || 
-                            member.permissions.has('ManageGuild');
-
-            if (!isStaff) {
-                return interaction.reply({ content: '❌ You must be a staff member to conclude a shift vote.', ephemeral: true });
+                await concludeShiftVote(activeVote, interaction.guild, interaction.user.id);
+                return interaction.reply({ content: `✅ Shift Vote **#${activeVote.id}** has been concluded early and tallied!`, ephemeral: true });
             }
 
-            const db = getDb();
-            const activeVote = await db.getActiveShiftVote();
-            if (!activeVote) {
-                return interaction.reply({ content: '❌ There is no active shift vote to conclude.', ephemeral: true });
+            if (sub === 'status') {
+                const db = getDb();
+                const activeVote = await db.getActiveShiftVote();
+                if (!activeVote) {
+                    return interaction.reply({ content: 'ℹ️ There is currently no active store shift vote.', ephemeral: true });
+                }
+
+                const yesCount = activeVote.upvotes ? activeVote.upvotes.length : 0;
+                const noCount = activeVote.downvotes ? activeVote.downvotes.length : 0;
+                const target = activeVote.target_votes || 5;
+                const expiresTimestamp = Math.floor(new Date(activeVote.expires_at).getTime() / 1000);
+
+                const yesList = activeVote.upvotes && activeVote.upvotes.length > 0 ? activeVote.upvotes.map(u => `<@${u}>`).join(', ') : '*None*';
+                const noList = activeVote.downvotes && activeVote.downvotes.length > 0 ? activeVote.downvotes.map(u => `<@${u}>`).join(', ') : '*None*';
+
+                const embed = new EmbedBuilder()
+                    .setTitle(`📊 Live Shift Vote Status — #${activeVote.id}`)
+                    .setDescription(`A vote is actively underway in <#${activeVote.channel_id}>!`)
+                    .addFields(
+                        { name: '👤 Host Candidate', value: `<@${activeVote.host_id}>`, inline: true },
+                        { name: '🎯 Target', value: `${yesCount}/${target} YES votes`, inline: true },
+                        { name: '⏳ Ends', value: `<t:${expiresTimestamp}:R>`, inline: true },
+                        { name: `🟢 YES Votes (${yesCount})`, value: yesList.slice(0, 1024), inline: false },
+                        { name: `🔴 NO Votes (${noCount})`, value: noList.slice(0, 1024), inline: false }
+                    )
+                    .setColor(config.colors.secondary)
+                    .setTimestamp();
+
+                return interaction.reply({ embeds: [embed], ephemeral: true });
             }
 
-            await concludeShiftVote(activeVote, interaction.guild, interaction.user.id);
-            return interaction.reply({ content: `✅ Shift Vote **#${activeVote.id}** has been concluded early and tallied!`, ephemeral: true });
-        }
-    },
-    {
-        data: new SlashCommandBuilder()
-            .setName('shift-vote-status')
-            .setDescription('View live progress and tally of the active store shift vote'),
-        async execute(interaction) {
-            const db = getDb();
-            const activeVote = await db.getActiveShiftVote();
-            if (!activeVote) {
-                return interaction.reply({ content: 'ℹ️ There is currently no active store shift vote.', ephemeral: true });
+            if (sub === 'voters') {
+                const db = getDb();
+                const idOption = interaction.options.getInteger('id');
+                const vote = idOption ? await db.getShiftVote(idOption) : (await db.getActiveShiftVote() || await db.getLatestShiftVote());
+                
+                if (!vote) {
+                    return interaction.reply({ content: '❌ No shift vote record found.', ephemeral: true });
+                }
+
+                const yesCount = vote.upvotes ? vote.upvotes.length : 0;
+                const noCount = vote.downvotes ? vote.downvotes.length : 0;
+                const yesList = vote.upvotes && vote.upvotes.length > 0 ? vote.upvotes.map(u => `<@${u}>`).join(', ') : '*No votes recorded*';
+                const noList = vote.downvotes && vote.downvotes.length > 0 ? vote.downvotes.map(u => `<@${u}>`).join(', ') : '*No votes recorded*';
+
+                const embed = new EmbedBuilder()
+                    .setTitle(`👥 Shift Vote Voters — Vote #${vote.id}`)
+                    .setDescription(`**Status:** \`${vote.status}\` • **Shift Host:** <@${vote.host_id}>\n**Channel:** <#${vote.channel_id}>`)
+                    .addFields(
+                        { name: `🟢 Voted YES (${yesCount})`, value: yesList.slice(0, 1024), inline: false },
+                        { name: `🔴 Voted NO (${noCount})`, value: noList.slice(0, 1024), inline: false }
+                    )
+                    .setColor(vote.status === 'PASSED' ? config.colors.primary : config.colors.secondary)
+                    .setFooter({ text: `Grandway Shopping Operations • Total: ${yesCount + noCount} votes` })
+                    .setTimestamp();
+
+                return interaction.reply({ embeds: [embed], ephemeral: true });
             }
-
-            const yesCount = activeVote.upvotes ? activeVote.upvotes.length : 0;
-            const noCount = activeVote.downvotes ? activeVote.downvotes.length : 0;
-            const target = activeVote.target_votes || 5;
-            const expiresTimestamp = Math.floor(new Date(activeVote.expires_at).getTime() / 1000);
-
-            const yesList = activeVote.upvotes && activeVote.upvotes.length > 0 ? activeVote.upvotes.map(u => `<@${u}>`).join(', ') : '*None*';
-            const noList = activeVote.downvotes && activeVote.downvotes.length > 0 ? activeVote.downvotes.map(u => `<@${u}>`).join(', ') : '*None*';
-
-            const embed = new EmbedBuilder()
-                .setTitle(`📊 Live Shift Vote Status — #${activeVote.id}`)
-                .setDescription(`A vote is actively underway in <#${activeVote.channel_id}>!`)
-                .addFields(
-                    { name: '👤 Host Candidate', value: `<@${activeVote.host_id}>`, inline: true },
-                    { name: '🎯 Target', value: `${yesCount}/${target} YES votes`, inline: true },
-                    { name: '⏳ Ends', value: `<t:${expiresTimestamp}:R>`, inline: true },
-                    { name: `🟢 YES Votes (${yesCount})`, value: yesList.slice(0, 1024), inline: false },
-                    { name: `🔴 NO Votes (${noCount})`, value: noList.slice(0, 1024), inline: false }
-                )
-                .setColor(config.colors.secondary)
-                .setTimestamp();
-
-            return interaction.reply({ embeds: [embed], ephemeral: true });
-        }
-    },
-    {
-        data: new SlashCommandBuilder()
-            .setName('shift-vote-voters')
-            .setDescription('View the users who voted YES and NO for a store shift')
-            .addIntegerOption(opt => 
-                opt.setName('id')
-                    .setDescription('Shift Vote ID (Optional, defaults to active or latest vote)')
-                    .setRequired(false)
-            ),
-        async execute(interaction) {
-            const db = getDb();
-            const idOption = interaction.options.getInteger('id');
-            const vote = idOption ? await db.getShiftVote(idOption) : (await db.getActiveShiftVote() || await db.getLatestShiftVote());
-            
-            if (!vote) {
-                return interaction.reply({ content: '❌ No shift vote record found.', ephemeral: true });
-            }
-
-            const yesCount = vote.upvotes ? vote.upvotes.length : 0;
-            const noCount = vote.downvotes ? vote.downvotes.length : 0;
-            const yesList = vote.upvotes && vote.upvotes.length > 0 ? vote.upvotes.map(u => `<@${u}>`).join(', ') : '*No votes recorded*';
-            const noList = vote.downvotes && vote.downvotes.length > 0 ? vote.downvotes.map(u => `<@${u}>`).join(', ') : '*No votes recorded*';
-
-            const embed = new EmbedBuilder()
-                .setTitle(`👥 Shift Vote Voters — Vote #${vote.id}`)
-                .setDescription(`**Status:** \`${vote.status}\` • **Shift Host:** <@${vote.host_id}>\n**Channel:** <#${vote.channel_id}>`)
-                .addFields(
-                    { name: `🟢 Voted YES (${yesCount})`, value: yesList.slice(0, 1024), inline: false },
-                    { name: `🔴 Voted NO (${noCount})`, value: noList.slice(0, 1024), inline: false }
-                )
-                .setColor(vote.status === 'PASSED' ? config.colors.primary : config.colors.secondary)
-                .setFooter({ text: `Grandway Shopping Operations • Total: ${yesCount + noCount} votes` })
-                .setTimestamp();
-
-            return interaction.reply({ embeds: [embed], ephemeral: true });
         }
     }
 ];

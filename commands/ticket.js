@@ -573,34 +573,6 @@ module.exports = [
     },
     {
         data: new SlashCommandBuilder()
-            .setName('ticket-panel')
-            .setDescription('Deploy the interactive multi-category Ticket Support Panel in this channel')
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
-        async execute(interaction) {
-            const member = interaction.member;
-            const isAuthorized = member.permissions.has(PermissionFlagsBits.ManageGuild) ||
-                                 member.roles.cache.has(config.roles.hr) ||
-                                 member.roles.cache.has(config.roles.mr) ||
-                                 (config.ignoredUserIds || []).includes(interaction.user.id);
-
-            if (!isAuthorized) {
-                return interaction.reply({ content: '❌ Only Grandway Shopping Staff Management can deploy the ticket panel.', flags: MessageFlags.Ephemeral });
-            }
-
-            const embed = await buildTicketPanelEmbed(interaction.guild);
-            const menu = buildTicketPanelSelectMenu();
-
-            const panelMsg = await interaction.channel.send({ embeds: [embed], components: [menu] });
-            const db = getDb();
-            await db.updateTicketSettings({
-                panel_channel_id: interaction.channel.id,
-                panel_message_id: panelMsg.id
-            });
-            return interaction.reply({ content: '✅ Interactive Ticket Panel deployed successfully in this channel!', flags: MessageFlags.Ephemeral });
-        }
-    },
-    {
-        data: new SlashCommandBuilder()
             .setName('ticket-force-open')
             .setDescription('Force open a direct ModMail DM relay thread with a user')
             .addUserOption(opt =>
