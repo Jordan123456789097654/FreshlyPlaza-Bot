@@ -5,6 +5,7 @@ module.exports = {
     robloxGroupId: '505768378',
     storeName: 'Grandway Shopping',
     robloxGameLink: 'https://www.roblox.com/games/76637220767393/FreshlyPlazza-V2',
+    webDashboardUrl: process.env.WEB_DASHBOARD_URL || 'http://fi14.bot-hosting.cloud:26134',
     
     // Brand Colors
     colors: {

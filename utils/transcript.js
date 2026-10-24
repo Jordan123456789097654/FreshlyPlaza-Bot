@@ -284,7 +284,7 @@ async function saveTranscriptAndGetUrl(ticketId, htmlContent) {
     };
     db.save();
 
-    const baseUrl = config.webDashboardUrl || 'http://localhost:26134';
+    const baseUrl = config.webDashboardUrl || process.env.WEB_DASHBOARD_URL || 'http://fi14.bot-hosting.cloud:26134';
     return `${baseUrl}/transcript/${ticketId}`;
 }
 
