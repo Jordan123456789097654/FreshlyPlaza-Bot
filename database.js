@@ -28,7 +28,10 @@ let dbData = {
     ia_cases: [],
     ia_whistleblows: [],
     ia_audit_flags: [],
-    auto_roles: []
+    auto_roles: [],
+    music_playlists: {},
+    music_favorites: {},
+    music_settings: {}
 };
 
 function saveDb() {
@@ -1192,6 +1195,105 @@ const db = {
         loadDb();
         if (!dbData.ia_audit_flags) dbData.ia_audit_flags = [];
         return [...dbData.ia_audit_flags].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, limit);
+    },
+
+    // Custom Playlists & Favorites
+    async saveServerPlaylist(name, tracks, authorId, guildId) {
+        loadDb();
+        if (!dbData.music_playlists) dbData.music_playlists = {};
+        const key = name.toLowerCase().trim();
+        dbData.music_playlists[key] = {
+            name,
+            tracks,
+            authorId,
+            guildId,
+            updatedAt: new Date().toISOString()
+        };
+        saveDb();
+        return dbData.music_playlists[key];
+    },
+
+    async getServerPlaylist(name) {
+        loadDb();
+        if (!dbData.music_playlists) dbData.music_playlists = {};
+        return dbData.music_playlists[name.toLowerCase().trim()] || null;
+    },
+
+    async listServerPlaylists() {
+        loadDb();
+        if (!dbData.music_playlists) dbData.music_playlists = {};
+        return Object.values(dbData.music_playlists);
+    },
+
+    async deleteServerPlaylist(name) {
+        loadDb();
+        if (!dbData.music_playlists) dbData.music_playlists = {};
+        const key = name.toLowerCase().trim();
+        if (dbData.music_playlists[key]) {
+            delete dbData.music_playlists[key];
+            saveDb();
+            return true;
+        }
+        return false;
+    },
+
+    async addUserFavorite(userId, track) {
+        loadDb();
+        if (!dbData.music_favorites) dbData.music_favorites = {};
+        if (!dbData.music_favorites[userId]) dbData.music_favorites[userId] = [];
+        const exists = dbData.music_favorites[userId].some(t => t.url === track.url);
+        if (!exists) {
+            dbData.music_favorites[userId].unshift({
+                ...track,
+                addedAt: new Date().toISOString()
+            });
+            if (dbData.music_favorites[userId].length > 50) dbData.music_favorites[userId].pop();
+            saveDb();
+            return true;
+        }
+        return false;
+    },
+
+    async getUserFavorites(userId) {
+        loadDb();
+        if (!dbData.music_favorites) dbData.music_favorites = {};
+        return dbData.music_favorites[userId] || [];
+    },
+
+    async removeUserFavorite(userId, url) {
+        loadDb();
+        if (!dbData.music_favorites || !dbData.music_favorites[userId]) return false;
+        const initial = dbData.music_favorites[userId].length;
+        dbData.music_favorites[userId] = dbData.music_favorites[userId].filter(t => t.url !== url);
+        if (dbData.music_favorites[userId].length !== initial) {
+            saveDb();
+            return true;
+        }
+        return false;
+    },
+
+    async getMusicSettings(guildId) {
+        loadDb();
+        if (!dbData.music_settings) dbData.music_settings = {};
+        if (!dbData.music_settings[guildId]) {
+            dbData.music_settings[guildId] = {
+                djRoleId: null,
+                maxTrackSeconds: 900,
+                maxQueuePerUser: 10
+            };
+        }
+        return dbData.music_settings[guildId];
+    },
+
+    async updateMusicSettings(guildId, settings) {
+        loadDb();
+        if (!dbData.music_settings) dbData.music_settings = {};
+        dbData.music_settings[guildId] = {
+            ...(dbData.music_settings[guildId] || {}),
+            ...settings
+        };
+        saveDb();
+        return dbData.music_settings[guildId];
     }
 };
 

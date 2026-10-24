@@ -68,6 +68,11 @@ class GuildMusicQueue {
         // Current Track Synced Lyrics
         this.currentLyrics = null;
 
+        // Sleep timer & Skip Votes
+        this.sleepTimeout = null;
+        this.sleepEndsAt = null;
+        this.skipVotes = new Set();
+
         this.setupPlayerListeners();
     }
 
@@ -335,7 +340,37 @@ class GuildMusicQueue {
         return this.queue.splice(index, 1)[0];
     }
 
+    setSleepTimer(minutes, textChannel) {
+        if (this.sleepTimeout) clearTimeout(this.sleepTimeout);
+        if (!minutes || minutes <= 0) {
+            this.sleepTimeout = null;
+            this.sleepEndsAt = null;
+            return false;
+        }
+
+        this.sleepEndsAt = Date.now() + (minutes * 60 * 1000);
+        this.sleepTimeout = setTimeout(() => {
+            if (textChannel) {
+                textChannel.send('😴 **Sleep Timer Ended:** Music playback stopped and disconnected. Goodnight!').catch(() => {});
+            }
+            this.stop();
+            this.destroy();
+        }, minutes * 60 * 1000);
+        return true;
+    }
+
+    cancelSleepTimer() {
+        if (this.sleepTimeout) {
+            clearTimeout(this.sleepTimeout);
+            this.sleepTimeout = null;
+            this.sleepEndsAt = null;
+            return true;
+        }
+        return false;
+    }
+
     destroy() {
+        this.cancelSleepTimer();
         this.cancelDisconnect();
         this.queue = [];
         this.currentTrack = null;
@@ -391,7 +426,46 @@ const musicManager = {
     },
 
     async resolveQuery(query, requester) {
-        const cleanQuery = query.trim();
+        let cleanQuery = query.trim();
+
+        // 0. Spotify, Apple Music, and SoundCloud URL Auto-Conversion
+        if (cleanQuery.includes('open.spotify.com/')) {
+            try {
+                const https = require('https');
+                const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(cleanQuery)}`;
+                const spData = await new Promise(resolve => {
+                    https.get(oembedUrl, { headers: { 'User-Agent': 'GrandwayMusic/2.0' } }, res => {
+                        let d = '';
+                        res.on('data', c => d += c);
+                        res.on('end', () => {
+                            try { resolve(JSON.parse(d)); } catch (_) { resolve(null); }
+                        });
+                    }).on('error', () => resolve(null));
+                });
+                if (spData && spData.title) {
+                    cleanQuery = spData.title;
+                }
+            } catch (_) {}
+        } else if (cleanQuery.includes('soundcloud.com/')) {
+            try {
+                const u = new URL(cleanQuery);
+                const parts = u.pathname.split('/').filter(Boolean);
+                if (parts.length >= 2) {
+                    const artist = parts[0].replace(/-/g, ' ');
+                    const track = parts[1].replace(/-/g, ' ');
+                    cleanQuery = `${track} ${artist}`;
+                }
+            } catch (_) {}
+        } else if (cleanQuery.includes('music.apple.com/')) {
+            try {
+                const u = new URL(cleanQuery);
+                const parts = u.pathname.split('/').filter(Boolean);
+                const albumIdx = parts.indexOf('album');
+                if (albumIdx !== -1 && parts[albumIdx + 1]) {
+                    cleanQuery = parts[albumIdx + 1].replace(/-/g, ' ');
+                }
+            } catch (_) {}
+        }
 
         // 1. YouTube Playlist Detection
         if (cleanQuery.includes('playlist?list=') || cleanQuery.includes('&list=')) {
