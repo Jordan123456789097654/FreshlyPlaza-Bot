@@ -96,6 +96,11 @@ function setupAuditLogger(client) {
     client.on('guildMemberAdd', async (member) => {
         try {
             if (member.guild.id !== config.guildId) return;
+
+            // Send custom welcome card into #welcome
+            const { sendWelcomeCard } = require('../utils/welcomeCard');
+            sendWelcomeCard(member).catch(() => {});
+
             const logChannel = getModLogsChannel();
             if (!logChannel) return;
 
