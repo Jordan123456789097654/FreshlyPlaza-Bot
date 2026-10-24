@@ -989,6 +989,31 @@ const server = http.createServer((req, res) => {
         }, null, 2));
     }
 
+    // 7.5. Online Ticket Transcript Web Viewer
+    if (pathname.startsWith('/transcript/')) {
+        const ticketId = pathname.replace('/transcript/', '').replace(/\/$/, '');
+        const db = getDb();
+        const data = db.getData();
+        const record = data.transcripts && data.transcripts[ticketId];
+
+        if (record && record.html) {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            return res.end(record.html);
+        } else {
+            res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+            return res.end(`
+                <!DOCTYPE html>
+                <html><head><title>Transcript Not Found</title></head>
+                <body style="font-family: sans-serif; background: #0f172a; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh;">
+                    <div style="text-align: center;">
+                        <h1>404 - Transcript Not Found</h1>
+                        <p style="color: #94a3b8;">Ticket transcript #${ticketId} does not exist or has expired.</p>
+                    </div>
+                </body></html>
+            `);
+        }
+    }
+
     // 8. Main /health and /status Endpoint (Supports automatic detection)
     if (pathname === '/health' || pathname === '/' || pathname === '/status') {
         const metrics = client.healthControl.getMetrics();

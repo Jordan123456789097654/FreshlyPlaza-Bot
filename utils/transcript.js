@@ -1,8 +1,8 @@
 const config = require('../config');
+const { getDb } = require('../database');
 
 /**
- * Clean HTML Transcript Generator for Grandway Shopping ModMail Channels
- * Generates an interactive Discord-like HTML transcript with avatars, timestamps, and embeds.
+ * Escapes HTML characters for safe rendering
  */
 function escapeHtml(str) {
     if (!str) return '';
@@ -14,6 +14,9 @@ function escapeHtml(str) {
         .replace(/'/g, '&#039;');
 }
 
+/**
+ * Generates interactive web-hosted HTML transcript
+ */
 async function generateHtmlTranscript(channel, ticket, messages = null) {
     if (!messages) {
         try {
@@ -51,35 +54,28 @@ async function generateHtmlTranscript(channel, ticket, messages = null) {
 
         let embedsHtml = '';
         if (msg.embeds && msg.embeds.length > 0) {
-            embedsHtml = '<div class="embeds">' + 
-                msg.embeds.map(emb => {
-                    const title = emb.title ? `<div class="embed-title">${escapeHtml(emb.title)}</div>` : '';
-                    const desc = emb.description ? `<div class="embed-desc">${escapeHtml(emb.description).replace(/\n/g, '<br>')}</div>` : '';
-                    let fieldsHtml = '';
-                    if (emb.fields && emb.fields.length > 0) {
-                        fieldsHtml = '<div class="embed-fields">' + emb.fields.map(f => 
-                            `<div class="embed-field"><span class="embed-field-name">${escapeHtml(f.name)}:</span> <span class="embed-field-val">${escapeHtml(f.value)}</span></div>`
-                        ).join('') + '</div>';
-                    }
-                    return `<div class="embed-box">${title}${desc}${fieldsHtml}</div>`;
-                }).join('') + '</div>';
+            embedsHtml = msg.embeds.map(emb => {
+                const title = emb.title ? `<div class="embed-title">${escapeHtml(emb.title)}</div>` : '';
+                const desc = emb.description ? `<div class="embed-desc">${escapeHtml(emb.description).replace(/\n/g, '<br>')}</div>` : '';
+                const colorHex = emb.color ? '#' + emb.color.toString(16).padStart(6, '0') : '#2ECC71';
+                return `<div class="embed-card" style="border-left-color: ${colorHex};">${title}${desc}</div>`;
+            }).join('');
         }
 
         messagesHtml += `
         <div class="message-row">
             <img src="${authorAvatar}" class="avatar" alt="${authorTag}" />
-            <div class="message-body">
+            <div class="message-content">
                 <div class="message-header">
-                    <span class="author-name">${authorTag}</span>
+                    <span class="username">${authorTag}</span>
                     ${isBot}
                     <span class="timestamp">${timestamp}</span>
                 </div>
-                ${content ? `<div class="message-content">${content}</div>` : ''}
+                ${content ? `<div class="text">${content}</div>` : ''}
                 ${attachmentsHtml}
                 ${embedsHtml}
             </div>
-        </div>
-        `;
+        </div>`;
     }
 
     return `<!DOCTYPE html>
@@ -87,61 +83,93 @@ async function generateHtmlTranscript(channel, ticket, messages = null) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grandway Shopping ModMail Thread #${ticketId} Transcript</title>
+    <title>ModMail #${ticketId} Transcript — Grandway Shopping</title>
     <style>
-        body {
-            background-color: #313338;
-            color: #dbdee1;
-            font-family: 'gg sans', 'Noto Sans', Helvetica, Arial, sans-serif;
-            margin: 0;
-            padding: 24px;
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #2ecc71;
+            --border: #475569;
         }
-        .header-box {
-            background: #2b2d31;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 24px;
-            border-left: 6px solid #2ecc71;
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            padding: 24px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 950px;
+            background-color: var(--bg-secondary);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+        }
+        .header {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            padding: 24px 32px;
+            border-bottom: 2px solid var(--accent);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
         }
-        .header-title {
-            font-size: 20px;
-            font-weight: 700;
+        .header-left h1 {
+            font-size: 22px;
             color: #ffffff;
-            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .header-meta {
-            font-size: 13px;
-            color: #949ba4;
+        .header-left p {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-top: 4px;
         }
         .badge {
-            background: #2ecc71;
-            color: #000;
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 12px;
+            background-color: var(--accent);
+            color: #0f172a;
             font-weight: 700;
-            text-transform: uppercase;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+        }
+        .meta-bar {
+            background-color: rgba(15, 23, 42, 0.5);
+            padding: 12px 32px;
+            font-size: 13px;
+            color: var(--text-muted);
+            display: flex;
+            gap: 24px;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
         }
         .messages-container {
+            padding: 24px 32px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 18px;
         }
         .message-row {
             display: flex;
             gap: 16px;
-            padding: 4px 0;
         }
         .avatar {
-            width: 40px;
-            height: 40px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
+            background-color: var(--bg-card);
             flex-shrink: 0;
         }
-        .message-body {
+        .message-content {
             flex-grow: 1;
         }
         .message-header {
@@ -150,98 +178,114 @@ async function generateHtmlTranscript(channel, ticket, messages = null) {
             gap: 8px;
             margin-bottom: 4px;
         }
-        .author-name {
+        .username {
             font-weight: 600;
-            color: #f2f3f5;
+            color: #ffffff;
             font-size: 15px;
         }
         .bot-badge {
-            background: #5865f2;
+            background-color: #5865f2;
             color: #ffffff;
             font-size: 10px;
             font-weight: 700;
-            padding: 1px 4px;
-            border-radius: 3px;
+            padding: 2px 6px;
+            border-radius: 4px;
         }
         .timestamp {
             font-size: 12px;
-            color: #949ba4;
+            color: var(--text-muted);
         }
-        .message-content {
-            font-size: 14px;
-            line-height: 1.4;
-            color: #dbdee1;
+        .text {
+            font-size: 14.5px;
+            line-height: 1.5;
+            color: #e2e8f0;
             word-break: break-word;
         }
-        .attachment-img {
-            max-width: 400px;
-            max-height: 300px;
-            border-radius: 8px;
+        .embed-card {
             margin-top: 8px;
-        }
-        .attachment-link {
-            color: #00a8fc;
-            text-decoration: none;
-            font-size: 13px;
-            display: inline-block;
-            margin-top: 6px;
-        }
-        .embed-box {
-            background: #2b2d31;
-            border-left: 4px solid #3498db;
+            background-color: var(--bg-card);
+            border-left: 4px solid var(--accent);
             border-radius: 4px;
-            padding: 12px;
-            margin-top: 8px;
-            max-width: 520px;
+            padding: 12px 16px;
+            max-width: 650px;
         }
         .embed-title {
             font-weight: 700;
-            color: #ffffff;
             margin-bottom: 6px;
-            font-size: 14px;
+            color: #ffffff;
         }
         .embed-desc {
+            font-size: 13.5px;
+            color: #cbd5e1;
+            line-height: 1.4;
+        }
+        .attachments {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .attachment-img {
+            max-width: 320px;
+            max-height: 240px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .attachment-link {
+            color: #38bdf8;
+            text-decoration: none;
             font-size: 13px;
-            color: #dbdee1;
-            margin-bottom: 8px;
-        }
-        .embed-field {
-            font-size: 12px;
-            margin-top: 4px;
-        }
-        .embed-field-name {
-            font-weight: 600;
-            color: #b5bac1;
-        }
-        .embed-field-val {
-            color: #dbdee1;
         }
         .footer {
-            margin-top: 32px;
             text-align: center;
+            padding: 16px;
             font-size: 12px;
-            color: #80848e;
-            border-top: 1px solid #3f4147;
-            padding-top: 16px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
         }
     </style>
 </head>
 <body>
-    <div class="header-box">
-        <div>
-            <div class="header-title">📬 Grandway Shopping — ModMail Thread #${ticketId} Transcript</div>
-            <div class="header-meta">Mailbox: <strong>${ticketType}</strong> • Opened: ${createdAt} • Closed: ${closedAt}</div>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>🛒 Grandway Shopping ModMail</h1>
+                <p>Official Online Ticket Transcript & Audit Archive</p>
+            </div>
+            <div class="badge">${ticketType} TICKET #${ticketId}</div>
         </div>
-        <span class="badge">Official Archive</span>
-    </div>
-    <div class="messages-container">
-        ${messagesHtml}
-    </div>
-    <div class="footer">
-        Generated by Grandway Shopping Automated ModMail System • All rights reserved.
+        <div class="meta-bar">
+            <span><strong>Created:</strong> ${createdAt}</span>
+            <span><strong>Closed:</strong> ${closedAt}</span>
+            <span><strong>Messages:</strong> ${messages.length}</span>
+            <span><strong>Status:</strong> Resolved</span>
+        </div>
+        <div class="messages-container">
+            ${messagesHtml || '<p style="color: var(--text-muted); font-style: italic;">No messages recorded in this thread.</p>'}
+        </div>
+        <div class="footer">
+            &copy; ${new Date().getFullYear()} Grandway Shopping • Secure ModMail Web Archives
+        </div>
     </div>
 </body>
 </html>`;
 }
 
-module.exports = { generateHtmlTranscript };
+/**
+ * Saves transcript to the database / memory and returns web URL
+ */
+async function saveTranscriptAndGetUrl(ticketId, htmlContent) {
+    const db = getDb();
+    const data = db.getData();
+    if (!data.transcripts) data.transcripts = {};
+    data.transcripts[String(ticketId)] = {
+        html: htmlContent,
+        updatedAt: new Date().toISOString()
+    };
+    db.save();
+
+    const baseUrl = config.webDashboardUrl || 'http://localhost:26134';
+    return `${baseUrl}/transcript/${ticketId}`;
+}
+
+module.exports = { generateHtmlTranscript, saveTranscriptAndGetUrl, escapeHtml };

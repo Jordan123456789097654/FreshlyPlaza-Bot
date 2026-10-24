@@ -11,7 +11,7 @@ const {
 const config = require('../config');
 const { getDb } = require('../database');
 const { withTicketOverride, hasTicketOverride } = require('../utils/ticketAccess');
-const { generateHtmlTranscript } = require('../utils/transcript');
+const { generateHtmlTranscript, saveTranscriptAndGetUrl } = require('../utils/transcript');
 
 const MODMAIL_CATEGORIES = {
     general: {
@@ -486,21 +486,19 @@ async function closeModmailThread({ channel, ticket, closedBy, reason = 'Resolve
     ticket.close_reason = reason;
     db.save();
 
-    // 1. Generate Transcript
-    let transcriptAttachment = null;
+    // 1. Generate Transcript & Web URL
+    let transcriptUrl = '';
     let htmlContent = '';
     if (channel) {
         try {
             htmlContent = await generateHtmlTranscript(channel, ticket);
-            transcriptAttachment = new AttachmentBuilder(Buffer.from(htmlContent, 'utf-8'), {
-                name: `transcript-modmail-${ticket.id}.html`
-            });
+            transcriptUrl = await saveTranscriptAndGetUrl(ticket.id, htmlContent);
         } catch (tErr) {
             console.error('[MODMAIL TRANSCRIPT ERROR]', tErr);
         }
     }
 
-    // 2. DM User with Transcript & Feedback Survey
+    // 2. DM User with Web Transcript Link & Feedback Survey
     try {
         const user = await client.users.fetch(ticket.user_id);
         if (user) {
@@ -510,7 +508,8 @@ async function closeModmailThread({ channel, ticket, closedBy, reason = 'Resolve
                     `Your ModMail thread with the Grandway Shopping team has been concluded.\n\n` +
                     `• **Reason for Closure:** ${reason}\n` +
                     `• **Closed By:** ${closedBy.username}\n\n` +
-                    `An official HTML transcript of your conversation has been attached for your records.`
+                    (transcriptUrl ? `🌐 **Online Transcript:** [Click here to view transcript](${transcriptUrl})\n\n` : '') +
+                    `You can view your complete message archive anytime using the online link.`
                 )
                 .setColor(config.colors.primary)
                 .setFooter({ text: 'Thank you for contacting Grandway Shopping ModMail!' })
@@ -523,8 +522,19 @@ async function closeModmailThread({ channel, ticket, closedBy, reason = 'Resolve
                 new ButtonBuilder().setCustomId(`survey_${ticket.id}_1`).setLabel('⭐ 1 (Poor)').setStyle(ButtonStyle.Danger)
             );
 
-            const files = transcriptAttachment ? [transcriptAttachment] : [];
-            await user.send({ embeds: [dmCloseEmbed], components: [surveyRow], files });
+            const rowButtons = [surveyRow];
+            if (transcriptUrl) {
+                const linkRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setLabel('View Online Transcript')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(transcriptUrl)
+                        .setEmoji('🌐')
+                );
+                rowButtons.unshift(linkRow);
+            }
+
+            await user.send({ embeds: [dmCloseEmbed], components: rowButtons });
         }
     } catch (_) {}
 
@@ -538,13 +548,26 @@ async function closeModmailThread({ channel, ticket, closedBy, reason = 'Resolve
                 { name: 'Category', value: (ticket.type || 'General').toUpperCase(), inline: true },
                 { name: 'User', value: `<@${ticket.user_id}>`, inline: true },
                 { name: 'Closed By', value: `<@${closedBy.id}>`, inline: true },
-                { name: 'Reason', value: reason, inline: false }
+                { name: 'Reason', value: reason, inline: false },
+                { name: '🌐 Web Transcript', value: transcriptUrl ? `[View Transcript Online](${transcriptUrl})` : 'Unavailable', inline: false }
             )
             .setColor(config.colors.secondary)
             .setTimestamp();
 
-        const files = transcriptAttachment ? [transcriptAttachment] : [];
-        await logChannel.send({ embeds: [logEmbed], files });
+        const logComponents = [];
+        if (transcriptUrl) {
+            logComponents.push(
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setLabel('Open Transcript Online')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(transcriptUrl)
+                        .setEmoji('🌐')
+                )
+            );
+        }
+
+        await logChannel.send({ embeds: [logEmbed], components: logComponents });
     }
 
     // 4. Delete Channel after 5 seconds

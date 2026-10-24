@@ -1,12 +1,24 @@
 const { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 const config = require('../config');
 const { getDb } = require('../database');
+const { refreshAllEmbedsWithNewGameLink } = require('../utils/embedSync');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('config')
-        .setDescription('Bot configuration controls (admins only)')
+        .setDescription('Bot and server configuration controls (admins only)')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addSubcommand(sub =>
+            sub.setName('game-link')
+                .setDescription('Update the official Roblox game link and auto-edit all server embeds & buttons')
+                .addStringOption(opt =>
+                    opt.setName('url')
+                        .setDescription('The new Roblox game link (e.g. https://www.roblox.com/games/...)')
+                        .setRequired(true)
+                )
+        )
         .addSubcommand(sub =>
             sub.setName('ai')
                 .setDescription('Turn the AI ticket assistant on or off everywhere')
@@ -31,6 +43,46 @@ module.exports = {
 
         const db = getDb();
         const sub = interaction.options.getSubcommand();
+
+        if (sub === 'game-link') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const newLink = interaction.options.getString('url').trim();
+
+            if (!newLink.startsWith('https://www.roblox.com/games/') && !newLink.startsWith('https://roblox.com/games/')) {
+                return interaction.editReply({
+                    content: '❌ Invalid Roblox game link format! It must start with `https://www.roblox.com/games/...`'
+                });
+            }
+
+            // 1. Update in runtime config
+            config.robloxGameLink = newLink;
+
+            // 2. Persist in config.js
+            try {
+                const configPath = path.join(__dirname, '../config.js');
+                let content = fs.readFileSync(configPath, 'utf8');
+                content = content.replace(/robloxGameLink:\s*'[^']+'/, `robloxGameLink: '${newLink}'`);
+                fs.writeFileSync(configPath, content, 'utf8');
+            } catch (err) {
+                console.error('[CONFIG GAME LINK] Error saving config.js:', err);
+            }
+
+            // 3. Scan and auto-update all bot embeds and button links across channels
+            const editedCount = await refreshAllEmbedsWithNewGameLink(interaction.client, newLink);
+
+            const embed = new EmbedBuilder()
+                .setTitle('🎮 Supermarket Game Link Updated!')
+                .setDescription(
+                    `Successfully updated the official Roblox game link to:\n` +
+                    `[**${newLink}**](${newLink})\n\n` +
+                    `✅ **Auto-Updated Embeds:** Edited **${editedCount}** existing announcement & verification embeds/buttons across server channels.`
+                )
+                .setColor(config.colors.primary)
+                .setFooter({ text: `Updated by ${interaction.user.tag}` })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        }
 
         if (sub === 'ai') {
             const enabled = interaction.options.getBoolean('enabled');
@@ -57,6 +109,7 @@ module.exports = {
                 .setTitle('⚙️ Bot Configuration Status')
                 .addFields(
                     { name: '🤖 AI Assistant', value: aiOn ? '🟢 Enabled' : '🔴 Disabled', inline: true },
+                    { name: '🎮 Current Game Link', value: `[Link](${config.robloxGameLink})`, inline: true },
                     { name: '🔑 Ticket Override User', value: `<@${config.ticketOverride.userId}>`, inline: true }
                 )
                 .setColor(config.colors.secondary)
