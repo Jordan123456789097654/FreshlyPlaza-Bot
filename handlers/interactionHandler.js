@@ -202,6 +202,55 @@ async function handleInteraction(interaction) {
             return await interaction.showModal(modal);
         }
 
+        // ModMail Hub Category Buttons (From #support-center Panel)
+        if (customId.startsWith('ticket_') && !customId.startsWith('ticket_settings_')) {
+            const categoryKey = customId.replace('ticket_', ''); // 'general', 'report', 'management', 'tech'/'technical', 'appeal'/'appeals'
+            const normalizedKey = categoryKey === 'tech' ? 'technical' : (categoryKey === 'appeal' ? 'appeals' : categoryKey);
+
+            const { MODMAIL_CATEGORIES, createModmailThread } = require('./modmailHandler');
+            const selectedCat = MODMAIL_CATEGORIES[normalizedKey] || MODMAIL_CATEGORIES.general;
+
+            // 1. Check blacklist
+            const isBanned = await db.isTicketBlacklisted(interaction.user.id);
+            if (isBanned) {
+                const expText = isBanned.expires_at ? `<t:${Math.floor(new Date(isBanned.expires_at).getTime() / 1000)}:R>` : 'Never (Permanent)';
+                return interaction.reply({
+                    content: `🚫 **ModMail Access Restricted:** You are blacklisted from opening Grandway Shopping ModMail.\n• **Reason:** ${isBanned.reason}\n• **Expires:** ${expText}`,
+                    ephemeral: true
+                });
+            }
+
+            // 2. Check existing active ticket
+            const activeTicket = await db.getActiveUserTicket(interaction.user.id);
+            if (activeTicket) {
+                return interaction.reply({
+                    content: `⚠️ You already have an active ModMail thread in progress! Please check your **Direct Messages (DMs)** or finish that conversation first.`,
+                    ephemeral: true
+                });
+            }
+
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const { staffChannel, ticketRecord } = await createModmailThread({
+                    guild: interaction.guild,
+                    user: interaction.user,
+                    categoryKey: normalizedKey,
+                    subject: `${selectedCat.label} Inquiry`,
+                    details: 'Opened via #support-center interactive panel button',
+                    client: interaction.client
+                });
+
+                return interaction.editReply({
+                    content: `✅ **ModMail Thread Opened!**\nOur **${selectedCat.label}** team has received your request.\n👉 **Please check your Direct Messages (DMs) with Grandway Utils to chat!**`
+                });
+            } catch (err) {
+                return interaction.editReply({
+                    content: `⚠️ ${err.message}`
+                });
+            }
+        }
+
         // Reaction Role Toggle Buttons
         if (customId.startsWith('rr_toggle_')) {
             const roleKey = customId.replace('rr_toggle_', '');

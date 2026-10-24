@@ -289,14 +289,26 @@ async function handleIncomingModmailDm(message, client) {
                 name: `${message.author.tag} (${message.author.id})`,
                 iconURL: message.author.displayAvatarURL({ dynamic: true })
             })
-            .setDescription(message.content || '*[Attachment/Image Only]*')
+            .setDescription(message.content || '*[Media / File Attachment Only]*')
             .setColor(config.colors.secondary)
             .setFooter({ text: `ModMail #${ticket.id} • Customer DM Message` })
             .setTimestamp();
 
         let files = [];
+        const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+        let hasImage = false;
+
         if (message.attachments.size > 0) {
             files = Array.from(message.attachments.values()).map(att => att.url);
+            // If attachment is an image, set it directly in the embed for rich display
+            const firstImg = Array.from(message.attachments.values()).find(att => 
+                (att.contentType && att.contentType.startsWith('image/')) || 
+                imageExtensions.some(ext => att.name.toLowerCase().endsWith(ext))
+            );
+            if (firstImg) {
+                relayEmbed.setImage(firstImg.url);
+                hasImage = true;
+            }
         }
 
         await staffChannel.send({ embeds: [relayEmbed], files });
@@ -365,25 +377,84 @@ async function handleStaffModmailMessage(message, client) {
 
     const rawContent = (message.content || '').trim();
 
-    // 1. Internal Note (!note <text> or // <text>)
-    const isStaffNote = /^(?:!note|=note|\/\/)\s+/i.test(rawContent);
+    // 1. Internal Note or Whisper (!note <text>, !whisper <text>, or // <text>)
+    const isStaffNote = /^(?:!note|=note|!whisper|=whisper|\/\/)\s+/i.test(rawContent);
     if (isStaffNote) {
-        const noteText = rawContent.replace(/^(?:!note|=note|\/\/)\s+/i, '').trim();
+        const noteText = rawContent.replace(/^(?:!note|=note|!whisper|=whisper|\/\/)\s+/i, '').trim();
         try { await message.delete(); } catch (_) {}
 
         if (noteText.length > 0) {
             await db.addTicketNote(message.channel.id, message.author.id, noteText);
             const noteEmbed = new EmbedBuilder()
                 .setAuthor({
-                    name: `🔒 Staff Internal Note — ${message.author.username}`,
+                    name: `🔒 Staff Internal Whisper — ${message.author.username}`,
                     iconURL: message.author.displayAvatarURL({ dynamic: true })
                 })
                 .setDescription(noteText)
-                .setColor(config.colors.warning)
-                .setFooter({ text: 'Internal Staff Note • Not sent to user DM' })
+                .setColor(0xF1C40F)
+                .setFooter({ text: 'Internal Staff Whisper • Not sent to user DM' })
                 .setTimestamp();
             await message.channel.send({ embeds: [noteEmbed] });
         }
+        return;
+    }
+
+    // 1.5. Staff Tag / Snippet command (!tag <tagKey> or !t <tagKey>)
+    const isTagCmd = /^(?:!tag|=tag|!t|=t)\s+/i.test(rawContent);
+    if (isTagCmd) {
+        const tagKey = rawContent.replace(/^(?:!tag|=tag|!t|=t)\s+/i, '').trim().toLowerCase();
+        try { await message.delete(); } catch (_) {}
+
+        const { SUPPORT_TAGS } = require('../commands/ticket');
+        const snippet = SUPPORT_TAGS[tagKey];
+        if (!snippet) {
+            return message.channel.send(`⚠️ Unknown tag \`${tagKey}\`! Available tags: \`${Object.keys(SUPPORT_TAGS).join(', ')}\``);
+        }
+
+        let targetUser = null;
+        try {
+            targetUser = await client.users.fetch(ticket.user_id);
+        } catch (_) {}
+
+        if (!targetUser) {
+            return message.channel.send('❌ Could not fetch user associated with this thread.');
+        }
+
+        const shouldSendAnon = Boolean(ticket.anon_mode);
+        const resolvedText = snippet.desc
+            .replace(/\{customer\}/g, `<@${targetUser.id}>`)
+            .replace(/\{staff\}/g, shouldSendAnon ? 'Grandway Support Team' : message.author.username)
+            .replace(/\{store\}/g, config.storeName);
+
+        const dmSnippetEmbed = new EmbedBuilder()
+            .setAuthor({
+                name: shouldSendAnon ? `${config.storeName} ModMail Team 🛡️` : `${message.author.username} (Staff Colleague)`,
+                iconURL: shouldSendAnon ? (message.guild.iconURL({ dynamic: true }) || undefined) : message.author.displayAvatarURL({ dynamic: true })
+            })
+            .setTitle(snippet.title)
+            .setDescription(resolvedText)
+            .setColor(snippet.color || config.colors.secondary)
+            .setFooter({ text: `${config.storeName} Official Response` })
+            .setTimestamp();
+
+        try {
+            await targetUser.send({ embeds: [dmSnippetEmbed] });
+        } catch (e) {
+            return message.channel.send('⚠️ Could not deliver tag to customer DMs.');
+        }
+
+        const staffReceipt = new EmbedBuilder()
+            .setAuthor({
+                name: `${message.author.username} (${shouldSendAnon ? 'Anonymous Tag' : 'Signed Tag'})`,
+                iconURL: message.author.displayAvatarURL({ dynamic: true })
+            })
+            .setTitle(`⚡ Quick Tag: ${snippet.title}`)
+            .setDescription(resolvedText)
+            .setColor(snippet.color || config.colors.primary)
+            .setFooter({ text: 'Tag delivered to customer DMs' })
+            .setTimestamp();
+
+        await message.channel.send({ embeds: [staffReceipt] });
         return;
     }
 
@@ -436,8 +507,16 @@ async function handleStaffModmailMessage(message, client) {
         .setTimestamp();
 
     let files = [];
+    const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
     if (message.attachments.size > 0) {
         files = Array.from(message.attachments.values()).map(att => att.url);
+        const firstImg = Array.from(message.attachments.values()).find(att => 
+            (att.contentType && att.contentType.startsWith('image/')) || 
+            imageExtensions.some(ext => att.name.toLowerCase().endsWith(ext))
+        );
+        if (firstImg) {
+            dmEmbed.setImage(firstImg.url);
+        }
     }
 
     try {
