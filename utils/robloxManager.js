@@ -1,10 +1,21 @@
+const path = require('path');
 const https = require('https');
 require('dotenv').config();
 const config = require('../config');
 
 let csrfToken = null;
 
-const COOKIE = process.env.ROBLOX_COOKIE;
+let COOKIE = process.env.ROBLOX_COOKIE;
+if (!COOKIE) {
+    try {
+        const cPath = path.join(__dirname, '..', 'COOKIE.txt');
+        if (fs.existsSync(cPath)) {
+            let raw = fs.readFileSync(cPath, 'utf8').trim();
+            if (raw.startsWith('.ROBLOSECURITY=')) raw = raw.replace('.ROBLOSECURITY=', '');
+            COOKIE = raw.replace(/^["']|["']$/g, '').trim();
+        }
+    } catch (_) {}
+}
 const GROUP_ID = process.env.ROBLOX_GROUP_ID || config.robloxGroupId || '505768378';
 
 function robloxRequest(options, postData = null) {
