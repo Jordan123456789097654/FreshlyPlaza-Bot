@@ -645,6 +645,7 @@ const WebPortal = {
     <div class="sidebar">
         <div class="brand">🛒 Grandway Utils</div>
         <div class="nav-links">
+            <a href="/music" class="nav-item">🎵 Music Command Center</a>
             <a href="/staff" class="nav-item active">💬 Live ModMail Hub</a>
             <a href="/leaderboard" class="nav-item">🏆 Colleague Leaderboards</a>
             <a href="/appeal" class="nav-item">⚖️ Moderation Appeals</a>

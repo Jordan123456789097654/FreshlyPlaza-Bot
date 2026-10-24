@@ -2,11 +2,13 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelect
 const config = require('../config');
 
 /**
- * Builds interactive Now Playing Embed
+ * Builds interactive Now Playing Embed with DSP effects badge
  */
 function buildNowPlayingEmbed(track, queue) {
     const loopStatus = queue.loopMode === 'track' ? '🔂 Single Track' : (queue.loopMode === 'queue' ? '🔁 Entire Queue' : 'Off');
     const isPaused = queue.player.state.status === 'paused';
+    const filterLabel = queue.activeFilter !== 'none' ? `🎛️ ${queue.activeFilter.toUpperCase()}` : 'Default (Clean)';
+    const speedLabel = queue.speed !== 1.0 ? `${queue.speed}x` : '1.0x';
 
     const embed = new EmbedBuilder()
         .setTitle('🎵 Now Playing')
@@ -15,6 +17,8 @@ function buildNowPlayingEmbed(track, queue) {
             { name: '🎤 Artist / Channel', value: track.author || 'Unknown', inline: true },
             { name: '⏱️ Duration', value: track.duration || 'Live', inline: true },
             { name: '🔊 Volume', value: `${queue.volume}%`, inline: true },
+            { name: '⚡ Speed / Pitch', value: `\`${speedLabel}\``, inline: true },
+            { name: '🎛️ DSP Preset', value: `\`${filterLabel}\``, inline: true },
             { name: '🔁 Loop Mode', value: loopStatus, inline: true },
             { name: '📑 In Queue', value: `${queue.queue.length} track(s)`, inline: true },
             { name: '👤 Requested By', value: `<@${track.requester.id}>`, inline: true }
@@ -60,9 +64,6 @@ function buildMusicControlRow(queue) {
     );
 }
 
-/**
- * Builds interactive selection dropdown for YouTube search results
- */
 function buildSearchResultsMenu(results, searchSessionId) {
     const options = results.slice(0, 5).map((t, idx) => ({
         label: t.title.slice(0, 95),
@@ -79,9 +80,6 @@ function buildSearchResultsMenu(results, searchSessionId) {
     );
 }
 
-/**
- * Builds paginated queue embed
- */
 function buildQueueEmbed(queue, page = 1) {
     const itemsPerPage = 8;
     const totalPages = Math.max(1, Math.ceil(queue.queue.length / itemsPerPage));
@@ -99,7 +97,7 @@ function buildQueueEmbed(queue, page = 1) {
     }
 
     if (queue.queue.length === 0) {
-        embed.addFields({ name: 'Empty Queue', value: 'No tracks currently waiting. Use `/play` to add more music!' });
+        embed.addFields({ name: 'Empty Queue', value: 'No tracks currently waiting. Use `/play` or the Web Dashboard to add music!' });
         return embed;
     }
 

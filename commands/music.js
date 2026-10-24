@@ -8,6 +8,7 @@ const {
 } = require('discord.js');
 const musicManager = require('../utils/musicManager');
 const { buildNowPlayingEmbed, buildMusicControlRow, buildSearchResultsMenu, buildQueueEmbed } = require('../utils/musicUtils');
+const lyricsService = require('../utils/lyricsService');
 const config = require('../config');
 
 // Temporary search sessions storage
@@ -66,7 +67,6 @@ module.exports = [
                 queue.connect(voiceChannel, interaction.channel);
 
                 if (result.type === 'playlist') {
-                    // Queue all tracks in playlist
                     result.tracks.forEach(t => queue.queue.push(t));
 
                     const embed = new EmbedBuilder()
@@ -98,7 +98,6 @@ module.exports = [
                         userId: interaction.user.id
                     });
 
-                    // Auto expire search session after 60 seconds
                     setTimeout(() => searchSessions.delete(sessionId), 60000);
 
                     const selectMenu = buildSearchResultsMenu(result.results, sessionId);
@@ -108,7 +107,6 @@ module.exports = [
                     });
                 }
 
-                // Single track or top search result
                 const track = result.type === 'track' ? result.track : result.topTrack;
 
                 if (queue.isPlaying || queue.currentTrack) {
@@ -309,36 +307,76 @@ module.exports = [
     },
     {
         data: new SlashCommandBuilder()
-            .setName('remove')
-            .setDescription('Remove a specific track from the queue by its number')
-            .addIntegerOption(opt =>
-                opt.setName('position')
-                    .setDescription('Queue position number to remove (see /queue)')
-                    .setMinValue(1)
-                    .setRequired(true)
+            .setName('lyrics')
+            .setDescription('Display real-time synchronized scrolling lyrics for the current song or search term')
+            .addStringOption(opt =>
+                opt.setName('song')
+                    .setDescription('Optional specific song name or artist to look up lyrics for')
+                    .setRequired(false)
             ),
         async execute(interaction) {
             const queue = musicManager.getQueue(interaction.guild.id);
-            const pos = interaction.options.getInteger('position');
+            const customQuery = interaction.options.getString('song');
+            const targetQuery = customQuery || (queue.currentTrack ? `${queue.currentTrack.title} ${queue.currentTrack.author}` : null);
 
-            if (pos > queue.queue.length) {
+            if (!targetQuery) {
                 return interaction.reply({
-                    content: `⚠️ Invalid position! The queue currently only has ${queue.queue.length} track(s).`,
+                    content: '⚠️ No song is currently playing. Please provide a song name (e.g. `/lyrics song:Shape of You`).',
                     flags: MessageFlags.Ephemeral
                 });
             }
 
-            const removed = queue.remove(pos - 1);
-            if (!removed) {
-                return interaction.reply({ content: '⚠️ Could not remove track.', flags: MessageFlags.Ephemeral });
+            await interaction.deferReply();
+
+            const lyricsData = await lyricsService.fetchLyrics(targetQuery);
+            if (!lyricsData || (!lyricsData.plainLyrics && !lyricsData.syncedLyrics)) {
+                return interaction.editReply({
+                    content: `🔍 No synchronized or plain lyrics found for: **${targetQuery}**.`
+                });
             }
 
-            return interaction.reply({
-                content: `🗑️ Removed track **#${pos}**: **${removed.title}** from the queue.`
-            });
+            const elapsedSec = queue.getPlaybackSeconds();
+            let displayLyrics = '';
+
+            if (lyricsData.syncedLyrics && lyricsData.syncedLyrics.length > 0) {
+                // Find current active line
+                let activeIdx = 0;
+                for (let i = 0; i < lyricsData.syncedLyrics.length; i++) {
+                    if (elapsedSec >= lyricsData.syncedLyrics[i].time) {
+                        activeIdx = i;
+                    } else {
+                        break;
+                    }
+                }
+
+                // Show window of 8 lines around current line
+                const start = Math.max(0, activeIdx - 3);
+                const end = Math.min(lyricsData.syncedLyrics.length, start + 8);
+                const slice = lyricsData.syncedLyrics.slice(start, end);
+
+                displayLyrics = slice.map((line, idx) => {
+                    const actualIdx = start + idx;
+                    const mins = Math.floor(line.time / 60);
+                    const secs = Math.floor(line.time % 60).toString().padStart(2, '0');
+                    if (actualIdx === activeIdx) {
+                        return `▶️ **[${mins}:${secs}] ${line.text || '♪'}**`;
+                    }
+                    return `   [${mins}:${secs}] ${line.text || '♪'}`;
+                }).join('\n');
+            } else {
+                displayLyrics = lyricsData.plainLyrics.slice(0, 1500) + (lyricsData.plainLyrics.length > 1500 ? '\n\n*... (lyrics truncated)*' : '');
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🎤 Lyrics: ${lyricsData.trackName || targetQuery}`)
+                .setDescription(`**Artist:** ${lyricsData.artistName || 'Unknown'}\n\n${displayLyrics}`)
+                .setColor(config.colors.secondary)
+                .setFooter({ text: 'Powered by LRCLIB • Use web portal for real-time scrolling view' })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
         }
     }
 ];
 
-// Export searchSessions for interaction handling
 module.exports.searchSessions = searchSessions;

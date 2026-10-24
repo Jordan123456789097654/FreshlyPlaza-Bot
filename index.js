@@ -1538,6 +1538,271 @@ const server = http.createServer(async (req, res) => {
         `);
     }
 
+    // 7.6. Music Command Center Web Dashboard
+    if (pathname === '/music') {
+        const musicManager = require('./utils/musicManager');
+        const { renderMusicDashboard } = require('./utils/musicDashboard');
+        const guild = client.guilds.cache.get(config.guildId);
+        const queue = guild ? musicManager.getQueue(guild.id) : null;
+
+        const voiceChannels = guild ? guild.channels.cache
+            .filter(c => c.isVoiceBased())
+            .map(c => ({ id: c.id, name: c.name, membersCount: c.members.size })) : [];
+
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(renderMusicDashboard(queue, voiceChannels));
+    }
+
+    // 7.7. Music Dynamic Banner SVG
+    if (pathname === '/music/banner') {
+        const musicManager = require('./utils/musicManager');
+        const { generateNowPlayingSvg } = require('./utils/bannerGenerator');
+        const guild = client.guilds.cache.get(config.guildId);
+        const queue = guild ? musicManager.getQueue(guild.id) : null;
+        const track = (queue && queue.currentTrack) ? queue.currentTrack : {
+            title: 'No Track Playing',
+            author: 'Grandway Music System',
+            duration: '0:00',
+            seconds: 1,
+            thumbnail: null
+        };
+
+        const svg = generateNowPlayingSvg(track, queue);
+        res.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8' });
+        return res.end(svg);
+    }
+
+    // 7.8. Music Dashboard API Controls
+    if (pathname === '/api/music/control' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { action } = JSON.parse(body);
+                const musicManager = require('./utils/musicManager');
+                const guild = client.guilds.cache.get(config.guildId);
+                if (!guild) return res.end(JSON.stringify({ error: 'Guild not ready' }));
+                const queue = musicManager.getQueue(guild.id);
+
+                if (action === 'toggle_pause') {
+                    if (queue.player.state.status === 'paused') queue.resume();
+                    else queue.pause();
+                } else if (action === 'skip') {
+                    queue.skip();
+                } else if (action === 'stop') {
+                    queue.stop();
+                } else if (action === 'shuffle') {
+                    queue.shuffle();
+                } else if (action === 'clear') {
+                    queue.queue = [];
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/music/volume' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { volume } = JSON.parse(body);
+                const musicManager = require('./utils/musicManager');
+                const guild = client.guilds.cache.get(config.guildId);
+                if (guild) {
+                    const queue = musicManager.getQueue(guild.id);
+                    queue.setVolume(volume);
+                }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/music/filter' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { filter, speed } = JSON.parse(body);
+                const musicManager = require('./utils/musicManager');
+                const guild = client.guilds.cache.get(config.guildId);
+                if (guild) {
+                    const queue = musicManager.getQueue(guild.id);
+                    await queue.applyFilter(filter, speed);
+                }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/music/loop' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { mode } = JSON.parse(body);
+                const musicManager = require('./utils/musicManager');
+                const guild = client.guilds.cache.get(config.guildId);
+                if (guild) {
+                    const queue = musicManager.getQueue(guild.id);
+                    queue.loopMode = mode;
+                }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/music/queue' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { query } = JSON.parse(body);
+                const musicManager = require('./utils/musicManager');
+                const guild = client.guilds.cache.get(config.guildId);
+                if (!guild) return res.end(JSON.stringify({ error: 'Guild unavailable' }));
+                const queue = musicManager.getQueue(guild.id);
+
+                // Auto find default voice channel if disconnected
+                if (!queue.connection) {
+                    const defaultVc = guild.channels.cache.find(c => c.isVoiceBased() && c.name.includes('Music')) || guild.channels.cache.find(c => c.isVoiceBased());
+                    const defaultText = guild.channels.cache.find(c => c.name === 'music-commands') || guild.channels.cache.find(c => c.isTextBased());
+                    if (defaultVc && defaultText) {
+                        queue.connect(defaultVc, defaultText);
+                    }
+                }
+
+                const resolved = await musicManager.resolveQuery(query, client.user);
+                if (resolved.type === 'empty') {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'No songs found matching query' }));
+                }
+
+                if (resolved.type === 'playlist') {
+                    resolved.tracks.forEach(t => queue.queue.push(t));
+                    if (!queue.isPlaying && !queue.currentTrack) {
+                        queue.playTrack(queue.queue.shift());
+                    }
+                } else {
+                    const track = resolved.type === 'track' ? resolved.track : resolved.topTrack;
+                    if (queue.isPlaying || queue.currentTrack) {
+                        queue.queue.push(track);
+                    } else {
+                        queue.playTrack(track);
+                    }
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/music/queue/delete' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { index } = JSON.parse(body);
+                const musicManager = require('./utils/musicManager');
+                const guild = client.guilds.cache.get(config.guildId);
+                if (guild) {
+                    const queue = musicManager.getQueue(guild.id);
+                    queue.remove(index);
+                }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/music/queue/reorder' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { from, to } = JSON.parse(body);
+                const musicManager = require('./utils/musicManager');
+                const guild = client.guilds.cache.get(config.guildId);
+                if (guild) {
+                    const queue = musicManager.getQueue(guild.id);
+                    if (from >= 0 && from < queue.queue.length && to >= 0 && to < queue.queue.length) {
+                        const [moved] = queue.queue.splice(from, 1);
+                        queue.queue.splice(to, 0, moved);
+                    }
+                }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/music/channel' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { channelId } = JSON.parse(body);
+                const musicManager = require('./utils/musicManager');
+                const guild = client.guilds.cache.get(config.guildId);
+                if (guild) {
+                    const queue = musicManager.getQueue(guild.id);
+                    const targetChannel = await client.channels.fetch(channelId).catch(() => null);
+                    if (targetChannel && targetChannel.isVoiceBased()) {
+                        queue.connect(targetChannel, queue.textChannel || targetChannel);
+                    }
+                }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/music/lyrics') {
+        const musicManager = require('./utils/musicManager');
+        const guild = client.guilds.cache.get(config.guildId);
+        const queue = guild ? musicManager.getQueue(guild.id) : null;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(queue && queue.currentLyrics ? queue.currentLyrics : { syncedLyrics: [], plainLyrics: null }));
+    }
+
     // 8. Main /health and /status Endpoint (Supports automatic detection)
     if (pathname === '/health' || pathname === '/' || pathname === '/status') {
         const metrics = client.healthControl.getMetrics();
