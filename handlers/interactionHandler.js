@@ -50,6 +50,14 @@ async function handleInteraction(interaction) {
 
     // DM ModMail Category Select Menu
     if (interaction.isStringSelectMenu() && interaction.customId === 'dm_modmail_select_category') {
+        const ticketSettings = await db.getTicketSettings();
+        if (!ticketSettings.enabled) {
+            return interaction.reply({
+                content: `⚠️ **ModMail Support Temporarily Paused:**\n${ticketSettings.disabled_reason || 'Grandway Shopping ModMail is currently offline for scheduled maintenance until further notice.'}`,
+                ephemeral: true
+            });
+        }
+
         await interaction.deferReply();
         const type = interaction.values[0];
         const guild = interaction.client.guilds.cache.get(config.guildId);
@@ -204,6 +212,14 @@ async function handleInteraction(interaction) {
 
         // ModMail Hub Category Buttons (From #support-center Panel)
         if (customId.startsWith('ticket_') && !customId.startsWith('ticket_settings_')) {
+            const ticketSettings = await db.getTicketSettings();
+            if (!ticketSettings.enabled) {
+                return interaction.reply({
+                    content: `⚠️ **ModMail Support Temporarily Paused:**\n${ticketSettings.disabled_reason || 'Grandway Shopping ModMail is currently offline for scheduled maintenance until further notice.'}`,
+                    ephemeral: true
+                });
+            }
+
             const categoryKey = customId.replace('ticket_', ''); // 'general', 'report', 'management', 'tech'/'technical', 'appeal'/'appeals'
             const normalizedKey = categoryKey === 'tech' ? 'technical' : (categoryKey === 'appeal' ? 'appeals' : categoryKey);
 

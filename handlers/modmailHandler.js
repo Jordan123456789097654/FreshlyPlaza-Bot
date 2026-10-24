@@ -271,6 +271,12 @@ async function handleIncomingModmailDm(message, client) {
         });
     }
 
+    // Check if ticket system is currently paused / disabled
+    const ticketSettings = await db.getTicketSettings();
+    if (!ticketSettings.enabled && !ticket) {
+        return message.author.send(`⚠️ **ModMail Support Temporarily Paused:**\n${ticketSettings.disabled_reason || 'Grandway Shopping ModMail is currently offline for scheduled maintenance until further notice.'}\n\nPlease check back later or check announcements for updates!`);
+    }
+
     // 1. Thread Already Active: Forward message to Staff Channel
     if (ticket) {
         const guild = client.guilds.cache.get(config.guildId);
