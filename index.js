@@ -1367,8 +1367,9 @@ const server = http.createServer(async (req, res) => {
                         await closeModmailThread({
                             channel: ch,
                             ticket: active,
-                            closedByUser: client.user,
+                            closedBy: client.user,
                             reason: 'User Blacklisted: ' + (reason || 'Blacklisted via Web Dashboard'),
+                            guild: ch.guild || client.guilds.cache.get(config.guildId),
                             client
                         });
                     }
@@ -1403,12 +1404,16 @@ const server = http.createServer(async (req, res) => {
                     await closeModmailThread({
                         channel: ch,
                         ticket,
-                        closedByUser: client.user,
+                        closedBy: client.user,
                         reason: reason || 'Closed via Web Dashboard',
+                        guild: ch.guild || client.guilds.cache.get(config.guildId),
                         client
                     });
                 } else {
                     ticket.status = 'CLOSED';
+                    ticket.closed_at = new Date().toISOString();
+                    ticket.closed_by = client.user ? client.user.id : 'SYSTEM';
+                    ticket.close_reason = reason || 'Closed via Web Dashboard';
                     db.save();
                 }
 
@@ -1422,7 +1427,77 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // 7.5. Online Ticket Transcript Web Viewer
+    // 7.4.7. Force-Open ModMail from Web Portal
+    if (pathname === '/api/staff/force-open' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { userId, category = 'general', reason = 'Staff inquiry' } = JSON.parse(body);
+                if (!userId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'User ID is required' }));
+                }
+
+                const db = getDb();
+                const isBlacklisted = await db.isTicketBlacklisted(userId);
+                if (isBlacklisted) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'User is currently blacklisted from ModMail.' }));
+                }
+
+                const activeTicket = await db.getActiveUserTicket(userId);
+                if (activeTicket) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: `User already has an active ModMail thread (#${activeTicket.id}).` }));
+                }
+
+                const guild = client.guilds.cache.get(config.guildId);
+                if (!guild) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Discord Guild not found in bot cache.' }));
+                }
+
+                const user = await client.users.fetch(userId).catch(() => null);
+                if (!user) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Discord user not found. Please verify the User ID.' }));
+                }
+
+                const { createModmailThread } = require('./handlers/modmailHandler');
+                const ticketRecord = await createModmailThread({
+                    guild,
+                    user,
+                    categoryKey: category,
+                    subject: `[STAFF INITIATED] ${reason}`,
+                    details: `Force-opened by Staff Web Command Center: ${reason}`,
+                    client
+                });
+
+                if (!ticketRecord) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Could not create ModMail thread. Check bot channel/DM permissions.' }));
+                }
+
+                // Send notification in the staff thread channel
+                const staffChannel = client.channels.cache.get(ticketRecord.channel_id);
+                if (staffChannel) {
+                    await staffChannel.send({
+                        content: `🚨 **STAFF FORCE-OPENED MODMAIL THREAD**\nInitiated via Web Command Center for reason: **${reason}**\nUser: <@${user.id}> (${user.tag})`
+                    }).catch(() => {});
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true, ticketId: ticketRecord.id }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // 7.5. Online Ticket Transcript Web Viewer (Supports both archived transcripts and LIVE active tickets)
     if (pathname.startsWith('/transcript/')) {
         const ticketId = pathname.replace('/transcript/', '').replace(/\/$/, '');
         const db = getDb();
@@ -1432,19 +1507,35 @@ const server = http.createServer(async (req, res) => {
         if (record && record.html) {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             return res.end(record.html);
-        } else {
-            res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
-            return res.end(`
-                <!DOCTYPE html>
-                <html><head><title>Transcript Not Found</title></head>
-                <body style="font-family: sans-serif; background: #0f172a; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh;">
-                    <div style="text-align: center;">
-                        <h1>404 - Transcript Not Found</h1>
-                        <p style="color: #94a3b8;">Ticket transcript #${ticketId} does not exist or has expired.</p>
-                    </div>
-                </body></html>
-            `);
         }
+
+        // If not in archived transcripts, check if it's an active or open ticket and generate live transcript
+        try {
+            const ticket = await db.getTicketById(ticketId);
+            if (ticket && ticket.channel_id) {
+                const ch = client.channels.cache.get(ticket.channel_id) || await client.channels.fetch(ticket.channel_id).catch(() => null);
+                if (ch) {
+                    const { generateHtmlTranscript } = require('./utils/transcript');
+                    const liveHtml = await generateHtmlTranscript(ch, ticket);
+                    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                    return res.end(liveHtml);
+                }
+            }
+        } catch (liveErr) {
+            console.error('[LIVE TRANSCRIPT ERROR]', liveErr);
+        }
+
+        res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(`
+            <!DOCTYPE html>
+            <html><head><title>Transcript Not Found</title></head>
+            <body style="font-family: sans-serif; background: #0f172a; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh;">
+                <div style="text-align: center;">
+                    <h1>404 - Transcript Not Found</h1>
+                    <p style="color: #94a3b8;">Ticket transcript #${ticketId} does not exist or has expired.</p>
+                </div>
+            </body></html>
+        `);
     }
 
     // 8. Main /health and /status Endpoint (Supports automatic detection)

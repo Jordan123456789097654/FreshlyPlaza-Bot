@@ -360,7 +360,8 @@ const WebPortal = {
                     <span>Notes: ${(t.notes || []).length}</span>
                 </div>
                 <div class="ticket-actions">
-                    <button class="btn-action btn-chat" onclick="openChatDrawer(${t.id}, '${escapeHtml(t.user_tag || t.user_id)}', '${t.user_id}', '${t.type || 'general'}', '${priorityLabel}')">💬 Open Live Chat</button>
+                    <button class="btn-action btn-chat" onclick="openChatDrawer(${t.id}, '${escapeHtml(t.user_tag || t.user_id)}', '${t.user_id}', '${t.type || 'general'}', '${priorityLabel}')">💬 Live Panel Chat</button>
+                    <a href="/transcript/${t.id}" target="_blank" class="btn-action btn-view-transcript">📄 View Live Transcript</a>
                     <button class="btn-action btn-transfer" onclick="openTransferModal(${t.id})">🔄 Transfer</button>
                     <button class="btn-action btn-prio" onclick="togglePriority(${t.id})">⭐ Priority</button>
                     <button class="btn-action btn-blacklist" onclick="blacklistUser('${t.user_id}', '${escapeHtml(t.user_tag || t.user_id)}')">🚫 Blacklist</button>
@@ -515,6 +516,8 @@ const WebPortal = {
         }
         .btn-chat { background: var(--primary); color: #05160d; }
         .btn-chat:hover { background: var(--primary-dark); }
+        .btn-view-transcript { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .btn-view-transcript:hover { background: rgba(148, 163, 184, 0.3); color: #fff; }
         .btn-transfer { background: rgba(52, 152, 219, 0.2); color: #60a5fa; }
         .btn-prio { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
         .btn-blacklist { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
@@ -655,7 +658,8 @@ const WebPortal = {
                 <h1>🛡️ Staff ModMail Command Center</h1>
                 <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Live customer messaging desk, department routing, and queue management</p>
             </div>
-            <div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-action btn-chat" onclick="openForceOpenModal()">➕ Force Open ModMail</button>
                 <button class="btn-action btn-close" onclick="location.reload()">🔄 Refresh Feed</button>
             </div>
         </div>
@@ -945,8 +949,36 @@ const WebPortal = {
                 if (data.success) {
                     alert('✅ Ticket #' + ticketId + ' closed!');
                     location.reload();
+                } else {
+                    alert('❌ Failed to close ticket: ' + (data.error || 'Unknown error'));
                 }
             } catch (e) { alert(e.message); }
+        }
+
+        async function openForceOpenModal() {
+            const userId = prompt('Enter Discord User ID to force-open ModMail with:');
+            if (!userId || !userId.trim()) return;
+            const category = prompt('Category (general, report, management, technical, appeals):', 'general');
+            if (!category) return;
+            const reason = prompt('Reason for force-opening ModMail:', 'Direct staff inquiry regarding store operations');
+            if (!reason) return;
+
+            try {
+                const res = await fetch('/api/staff/force-open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: userId.trim(), category: category.trim().toLowerCase(), reason })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('✅ ModMail thread #' + data.ticketId + ' successfully created and DM opened with user!');
+                    location.reload();
+                } else {
+                    alert('❌ Failed to force open: ' + (data.error || 'Server error'));
+                }
+            } catch (e) {
+                alert('⚠️ Error contacting server: ' + e.message);
+            }
         }
     </script>
 </body>

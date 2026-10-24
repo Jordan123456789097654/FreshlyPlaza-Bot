@@ -602,10 +602,10 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('ticket-force-open')
-            .setDescription('Force open a direct, human-only ticket with a member (AI is completely disabled)')
+            .setDescription('Force open a direct ModMail DM relay thread with a user')
             .addUserOption(opt =>
                 opt.setName('member')
-                    .setDescription('The member to force open a ticket with')
+                    .setDescription('The member to force open a ModMail thread with')
                     .setRequired(true)
             )
             .addStringOption(opt =>
@@ -613,16 +613,16 @@ module.exports = [
                     .setDescription('Support category for this ticket')
                     .setRequired(true)
                     .addChoices(
-                        { name: '💼 HR & Management Inquiry', value: 'management' },
+                        { name: '🛒 Customer & General ModMail', value: 'general' },
                         { name: '🛡️ Player or Staff Report', value: 'report' },
-                        { name: '🛒 Customer & General Support', value: 'general' },
+                        { name: '💼 HR & Management Inquiry', value: 'management' },
                         { name: '🐛 Technical & Bug Support', value: 'technical' },
                         { name: '⚖️ Moderation & Ban Appeal', value: 'appeals' }
                     )
             )
             .addStringOption(opt =>
                 opt.setName('reason')
-                    .setDescription('Reason for force opening this ticket with the member')
+                    .setDescription('Reason for force opening this ModMail thread with the member')
                     .setRequired(false)
             ),
         async execute(interaction) {
@@ -635,7 +635,7 @@ module.exports = [
                                  (config.ignoredUserIds || []).includes(interaction.user.id);
 
             if (!isAuthorized) {
-                return interaction.editReply({ content: '❌ Only Grandway Shopping Staff can force open a ticket.' });
+                return interaction.editReply({ content: '❌ Only Grandway Shopping Staff can force open a ModMail thread.' });
             }
 
             const targetUser = interaction.options.getUser('member');
@@ -643,108 +643,45 @@ module.exports = [
             const reason = interaction.options.getString('reason') || 'Staff initiated inquiry / investigation';
 
             const db = getDb();
-            const catConfig = TICKET_CATEGORIES[categoryKey] || TICKET_CATEGORIES.general;
-            const targetRoleId = config.roles[catConfig.roleKey] || config.roles.staff;
+            const isBlacklisted = await db.isTicketBlacklisted(targetUser.id);
+            if (isBlacklisted) {
+                return interaction.editReply({ content: `❌ <@${targetUser.id}> is currently blacklisted from ModMail.` });
+            }
 
-            // Find dedicated ━━━ 🎫 SUPPORT TICKETS ━━━ category in the guild
-            const supportCategory = interaction.guild.channels.cache.find(c => 
-                c.type === ChannelType.GuildCategory && 
-                (c.name.includes('SUPPORT TICKETS') || c.id === config.channels.ticketsCategory || c.id === '1558519068951187498')
-            );
-            const parentCategoryId = supportCategory ? supportCategory.id : (config.channels.ticketsCategory || interaction.channel.parentId);
+            const activeTicket = await db.getActiveUserTicket(targetUser.id);
+            if (activeTicket) {
+                return interaction.editReply({ content: `⚠️ <@${targetUser.id}> already has an active ModMail thread (<#${activeTicket.channel_id}>).` });
+            }
 
-            const ticketChannel = await interaction.guild.channels.create({
-                name: `forced-${targetUser.username.toLowerCase()}`.slice(0, 32),
-                type: ChannelType.GuildText,
-                parent: parentCategoryId,
-                permissionOverwrites: withTicketOverride([
-                    { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                    { 
-                        id: targetUser.id, 
-                        allow: [
-                            PermissionFlagsBits.ViewChannel, 
-                            PermissionFlagsBits.SendMessages, 
-                            PermissionFlagsBits.ReadMessageHistory,
-                            PermissionFlagsBits.AttachFiles,
-                            PermissionFlagsBits.EmbedLinks
-                        ] 
-                    },
-                    { 
-                        id: interaction.user.id, 
-                        allow: [
-                            PermissionFlagsBits.ViewChannel, 
-                            PermissionFlagsBits.SendMessages, 
-                            PermissionFlagsBits.ReadMessageHistory,
-                            PermissionFlagsBits.ManageMessages,
-                            PermissionFlagsBits.AttachFiles,
-                            PermissionFlagsBits.EmbedLinks
-                        ] 
-                    },
-                    { 
-                        id: targetRoleId, 
-                        allow: [
-                            PermissionFlagsBits.ViewChannel, 
-                            PermissionFlagsBits.SendMessages, 
-                            PermissionFlagsBits.ReadMessageHistory,
-                            PermissionFlagsBits.ManageMessages
-                        ] 
-                    }
-                ])
-            });
-
-            const ticketRecord = await db.createTicketRecord({
-                channelId: ticketChannel.id,
-                userId: targetUser.id,
-                userTag: targetUser.tag,
-                type: categoryKey,
+            const { createModmailThread } = require('../handlers/modmailHandler');
+            const ticketRecord = await createModmailThread({
+                guild: interaction.guild,
+                user: targetUser,
+                categoryKey,
                 subject: `[STAFF FORCE OPENED] ${reason}`,
                 details: `Opened by staff <@${interaction.user.id}> for reason: ${reason}`,
-                aiDisabled: true
+                client: interaction.client
             });
 
-            // Mark as immediately claimed by initiating staff
+            if (!ticketRecord) {
+                return interaction.editReply({ content: '❌ Failed to create ModMail thread. User DMs may be closed or bot is missing permissions.' });
+            }
+
+            // Mark claimed by initiating staff member
             ticketRecord.claimed_by = interaction.user.id;
             ticketRecord.claimed_at = new Date().toISOString();
             ticketRecord.status = 'CLAIMED';
-            ticketRecord.ai_disabled = true;
             db.save();
 
-            const welcomeEmbed = new EmbedBuilder()
-                .setTitle(`🚨 Staff Direct Inquiry — Ticket #${ticketRecord.id}`)
-                .setDescription(
-                    `Hello <@${targetUser.id}>,\n\n` +
-                    `A Grandway Shopping Staff Member (<@${interaction.user.id}>) has opened this direct communication channel with you regarding:\n` +
-                    `> **${reason}**\n\n` +
-                    `🚫 **AI Support is DISABLED** for this ticket. You are speaking directly with our verified Human Staff Team.\n\n` +
-                    `Please review the staff member's message and respond in this channel.`
-                )
-                .addFields(
-                    { name: '📋 Category', value: `${catConfig.emoji} ${catConfig.label}`, inline: true },
-                    { name: '👤 Member', value: `<@${targetUser.id}>`, inline: true },
-                    { name: '🛡️ Initiating Staff', value: `<@${interaction.user.id}>`, inline: true },
-                    { name: '🤖 AI Assistant Status', value: '`🔴 DISABLED (Human Staff Only)`', inline: false }
-                )
-                .setColor(config.colors.warning)
-                .setTimestamp()
-                .setFooter({ text: 'Grandway Shopping Staff Direct Channel • Human Moderation' });
-
-            await ticketChannel.send({
-                content: `<@${targetUser.id}> <@${interaction.user.id}> <@&${targetRoleId}> 🔔 **DIRECT STAFF INQUIRY**`,
-                embeds: [welcomeEmbed],
-                components: [buildTicketControlRow()]
-            });
-
-            // Attempt friendly DM notification to user
-            try {
-                const dmEmbed = new EmbedBuilder()
-                    .setTitle(`🏪 Grandway Shopping — Direct Staff Inquiry`)
-                    .setDescription(`A Grandway Shopping Staff Member (<@${interaction.user.id}>) has opened a direct support ticket with you in the server.\n\n**Reason:** ${reason}\n\nPlease head over to <#${ticketChannel.id}> to speak with staff.`)
-                    .setColor(config.colors.warning);
-                await targetUser.send({ embeds: [dmEmbed] });
-            } catch (dmErr) {}
+            const staffChannel = interaction.guild.channels.cache.get(ticketRecord.channel_id);
+            if (staffChannel) {
+                await staffChannel.send({
+                    content: `🚨 **STAFF FORCE-OPENED MODMAIL THREAD**\nInitiated by <@${interaction.user.id}> for reason: **${reason}**\nUser: <@${targetUser.id}> (${targetUser.tag})\nAll messages typed in this channel will be sent directly to user DMs!`
+                }).catch(() => {});
+            }
 
             return interaction.editReply({
-                content: `✅ Force-opened ticket **#${ticketRecord.id}** with <@${targetUser.id}> in <#${ticketChannel.id}>! (AI disabled)`
+                content: `✅ Force-opened ModMail thread **#${ticketRecord.id}** with <@${targetUser.id}> in <#${ticketRecord.channel_id}>! Customer has been contacted via DM.`
             });
         }
     },
