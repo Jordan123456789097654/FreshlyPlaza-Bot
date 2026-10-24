@@ -2,7 +2,7 @@ module.exports = {
     guildId: '1558519063649587301',
     testGuildId: null,
     trustAndSafetyGuildId: '1561767415044378694',
-    robloxGroupId: '1110376670',
+    robloxGroupId: '505768378',
     storeName: 'Grandway Shopping',
     robloxGameLink: 'https://www.roblox.com/games/76637220767393/FreshlyPlazza-V2',
     

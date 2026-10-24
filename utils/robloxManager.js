@@ -1,10 +1,11 @@
 const https = require('https');
 require('dotenv').config();
+const config = require('../config');
 
 let csrfToken = null;
 
 const COOKIE = process.env.ROBLOX_COOKIE;
-const GROUP_ID = process.env.ROBLOX_GROUP_ID || '1110376670';
+const GROUP_ID = process.env.ROBLOX_GROUP_ID || config.robloxGroupId || '505768378';
 
 function robloxRequest(options, postData = null) {
     return new Promise((resolve, reject) => {

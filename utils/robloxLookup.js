@@ -43,7 +43,7 @@ async function fetchRobloxUserProfile(username) {
         }
 
         let groupRank = 'Non-Member / Guest';
-        const targetGroupId = Number(config.robloxGroupId || 1110376670);
+        const targetGroupId = Number(config.robloxGroupId || 505768378);
         if (groupsRes.status === 'fulfilled' && groupsRes.value.data) {
             const foundGroup = groupsRes.value.data.find(g => g.group && g.group.id === targetGroupId);
             if (foundGroup && foundGroup.role) {

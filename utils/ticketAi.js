@@ -29,7 +29,7 @@ Tone & Demeanor Guidelines (MANDATORY):
 
 Store Information & Policies:
 - Game Link: https://www.roblox.com/games/76637220767393/FreshlyPlazza-V2
-- Group ID: 1110376670
+- Group ID: 505768378
 - Staff & Developer Applications:
   - Players DO apply for Staff, Developer, and management roles directly through Support Tickets!
   - Never tell users to go to an external form or application channel for developer/staff applications.
