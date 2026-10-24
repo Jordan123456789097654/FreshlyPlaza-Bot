@@ -834,6 +834,36 @@ async function handleInteraction(interaction) {
             return interaction.reply({ content: `✅ LOA #${loa.id} marked as **${isApprove ? 'APPROVED' : 'DENIED'}**!`, ephemeral: true });
         }
 
+        // Suggestion Submission Button (from #suggestions panel)
+        if (customId === 'btn_open_suggestion_modal') {
+            const modal = new ModalBuilder()
+                .setCustomId('modal_submit_suggestion')
+                .setTitle('Submit Grandway Suggestion');
+
+            const titleInput = new TextInputBuilder()
+                .setCustomId('sug_title')
+                .setLabel('Suggestion Title')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('e.g. Add Hot Cocoa & Donuts to Greggs Bakery')
+                .setRequired(true)
+                .setMaxLength(100);
+
+            const detailsInput = new TextInputBuilder()
+                .setCustomId('sug_idea')
+                .setLabel('Detailed Idea Description')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Describe your idea in detail and explain how it improves the supermarket.')
+                .setRequired(true)
+                .setMaxLength(1000);
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(titleInput),
+                new ActionRowBuilder().addComponents(detailsInput)
+            );
+
+            return await interaction.showModal(modal);
+        }
+
         // Suggestion Voting Buttons
         if (customId.startsWith('sug_upvote_') || customId.startsWith('sug_downvote_')) {
             const isUpvote = customId.startsWith('sug_upvote_');
@@ -866,13 +896,14 @@ async function handleInteraction(interaction) {
             sug.downvotes = downvotes;
             db.save();
 
+            const { buildSuggestionEmbed, buildSuggestionButtons } = require('../commands/suggestion');
             const newEmbed = buildSuggestionEmbed(sug);
             const newRows = buildSuggestionButtons(sug);
             return interaction.update({ embeds: [newEmbed], components: newRows });
         }
 
-        // Suggestion Management Buttons (Accept / In Progress / Deny)
-        if (customId.startsWith('sug_accept_') || customId.startsWith('sug_progress_') || customId.startsWith('sug_deny_')) {
+        // Suggestion Management Buttons (Accept / In Progress / Implemented / Deny)
+        if (customId.startsWith('sug_accept_') || customId.startsWith('sug_progress_') || customId.startsWith('sug_implement_') || customId.startsWith('sug_deny_')) {
             const member = interaction.member;
             const isManager = member && (
                 member.roles.cache.has(config.roles.mr) ||
@@ -893,36 +924,29 @@ async function handleInteraction(interaction) {
             } else if (customId.startsWith('sug_progress_')) {
                 sugId = customId.replace('sug_progress_', '');
                 newStatus = 'IN_PROGRESS';
+            } else if (customId.startsWith('sug_implement_')) {
+                sugId = customId.replace('sug_implement_', '');
+                newStatus = 'IMPLEMENTED';
             } else if (customId.startsWith('sug_deny_')) {
                 sugId = customId.replace('sug_deny_', '');
                 newStatus = 'DENIED';
             }
 
-            const data = db.getData();
-            const sug = (data.suggestions || []).find(s => String(s.id) === String(sugId));
-            if (!sug) return interaction.reply({ content: '❌ Suggestion record not found.', ephemeral: true });
+            // Show prompt modal for management review reason / notes
+            const modal = new ModalBuilder()
+                .setCustomId(`modal_sug_action_${newStatus}_${sugId}`)
+                .setTitle(`Suggestion Review: ${newStatus}`);
 
-            sug.status = newStatus;
-            sug.actioned_by = interaction.user.id;
-            sug.actioned_at = new Date().toISOString();
-            db.save();
+            const reasonInput = new TextInputBuilder()
+                .setCustomId('sug_reason')
+                .setLabel('Management Decision Note / Reason')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Explain the reason or update details for this decision...')
+                .setRequired(true)
+                .setMaxLength(500);
 
-            const newEmbed = buildSuggestionEmbed(sug);
-            const newRows = buildSuggestionButtons(sug);
-            await interaction.update({ embeds: [newEmbed], components: newRows });
-
-            // DM the suggestion submitter
-            try {
-                const submitter = await interaction.client.users.fetch(sug.user_id);
-                if (submitter) {
-                    const statusName = newStatus === 'ACCEPTED' ? '✅ ACCEPTED' : newStatus === 'IN_PROGRESS' ? '🚧 IN PROGRESS' : '❌ DENIED';
-                    await submitter.send({
-                        content: `💡 **Grandway Shopping Suggestion Update (#${sug.id})**\n\nYour suggestion: *"${sug.suggestion.slice(0, 100)}..."* has been marked as **${statusName}** by <@${interaction.user.id}>!\nThank you for contributing to Grandway Shopping.`
-                    });
-                }
-            } catch (e) {}
-
-            return;
+            modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+            return await interaction.showModal(modal);
         }
 
         // Survey rating button click -> Opens Modal for custom comments & 1-5 feedback
@@ -2001,6 +2025,140 @@ async function handleInteraction(interaction) {
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
+        }
+
+        // Suggestion Submission Modal
+        if (interaction.customId === 'modal_submit_suggestion') {
+            await interaction.deferReply({ ephemeral: true });
+            const title = interaction.fields.getTextInputValue('sug_title');
+            const idea = interaction.fields.getTextInputValue('sug_idea');
+
+            const data = db.getData();
+            if (!data.suggestions) data.suggestions = [];
+
+            const newId = data.suggestions.length + 1;
+            const sug = {
+                id: newId,
+                user_id: interaction.user.id,
+                title,
+                suggestion: idea,
+                category: 'other',
+                status: 'PENDING',
+                upvotes: [],
+                downvotes: [],
+                created_at: new Date().toISOString(),
+                actioned_by: null,
+                action_reason: null,
+                message_id: null,
+                thread_id: null
+            };
+
+            data.suggestions.push(sug);
+            db.save();
+
+            const { buildSuggestionEmbed, buildSuggestionButtons } = require('../commands/suggestion');
+            const sugChannel = interaction.guild.channels.cache.get(config.channels.suggestions);
+
+            if (sugChannel) {
+                const embed = buildSuggestionEmbed(sug);
+                const rows = buildSuggestionButtons(sug);
+                const msg = await sugChannel.send({ embeds: [embed], components: rows });
+
+                sug.message_id = msg.id;
+
+                try {
+                    const thread = await msg.startThread({
+                        name: `Suggestion #${newId} — ${title.slice(0, 50)}`,
+                        autoArchiveDuration: 1440
+                    });
+                    sug.thread_id = thread.id;
+                    await thread.send(`👋 Community discussion thread for Suggestion **#${newId}**. Discuss your thoughts below!`);
+                } catch (tErr) {}
+
+                db.save();
+            }
+
+            return interaction.editReply({
+                content: `✅ Suggestion **#${newId}** has been posted to <#${config.channels.suggestions}>!`
+            });
+        }
+
+        // Suggestion Management Action Reason Modal (Accept / In Progress / Implemented / Deny)
+        if (interaction.customId.startsWith('modal_sug_action_')) {
+            await interaction.deferReply({ ephemeral: true });
+            const parts = interaction.customId.split('_'); // ['modal', 'sug', 'action', 'ACCEPTED', '12']
+            const newStatus = parts[3];
+            const sugId = Number(parts[4]);
+            const reason = interaction.fields.getTextInputValue('sug_reason');
+
+            const data = db.getData();
+            const sug = (data.suggestions || []).find(s => s.id === sugId);
+            if (!sug) {
+                return interaction.editReply({ content: '❌ Suggestion record not found.' });
+            }
+
+            sug.status = newStatus;
+            sug.actioned_by = interaction.user.id;
+            sug.actioned_at = new Date().toISOString();
+            sug.action_reason = reason;
+            db.save();
+
+            const { buildSuggestionEmbed, buildSuggestionButtons } = require('../commands/suggestion');
+            const sugChannel = interaction.guild.channels.cache.get(config.channels.suggestions);
+
+            // Update main embed
+            if (sugChannel && sug.message_id) {
+                try {
+                    const msg = await sugChannel.messages.fetch(sug.message_id);
+                    const updatedEmbed = buildSuggestionEmbed(sug);
+                    const updatedButtons = buildSuggestionButtons(sug);
+                    await msg.edit({ embeds: [updatedEmbed], components: updatedButtons });
+                } catch (e) {}
+            }
+
+            // Post notice in discussion thread if open
+            if (sug.thread_id) {
+                try {
+                    const thread = interaction.guild.channels.cache.get(sug.thread_id);
+                    if (thread) {
+                        await thread.send(`👔 Suggestion **#${sug.id}** marked as **${newStatus}** by <@${interaction.user.id}>:\n> ${reason}`);
+                        if (newStatus === 'DENIED' || newStatus === 'IMPLEMENTED') {
+                            await thread.setArchived(true);
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            // Send notification DM to the suggestion author
+            try {
+                const author = await interaction.client.users.fetch(sug.user_id);
+                if (author) {
+                    const statusLabels = {
+                        ACCEPTED: '✅ Accepted by Management',
+                        IN_PROGRESS: '🚧 In Progress / Planned Update',
+                        IMPLEMENTED: '🎉 Implemented in Supermarket!',
+                        DENIED: '❌ Denied by Leadership'
+                    };
+
+                    const dmEmbed = new EmbedBuilder()
+                        .setTitle(`💡 Grandway Suggestion #${sug.id} Status Update`)
+                        .setDescription(
+                            `Your suggestion **"${sug.title || sug.suggestion.slice(0, 50)}"** has been reviewed by **${interaction.user.username}**!\n\n` +
+                            `• **New Status:** ${statusLabels[newStatus] || newStatus}\n` +
+                            `• **Management Decision Note:**\n> ${reason}\n\n` +
+                            `Thank you for contributing ideas to make Grandway Shopping a better experience!`
+                        )
+                        .setColor(newStatus === 'ACCEPTED' || newStatus === 'IMPLEMENTED' ? config.colors.primary : (newStatus === 'IN_PROGRESS' ? config.colors.warning : config.colors.danger))
+                        .setFooter({ text: 'Grandway Shopping Community Feedback' })
+                        .setTimestamp();
+
+                    await author.send({ embeds: [dmEmbed] });
+                }
+            } catch (dmErr) {}
+
+            return interaction.editReply({
+                content: `✅ Successfully marked Suggestion **#${sug.id}** as **${newStatus}**!`
+            });
         }
 
         // Submit Activity Appeal Modal
