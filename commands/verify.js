@@ -1,5 +1,4 @@
 const { EmbedBuilder, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const crypto = require('crypto');
 const config = require('../config');
 const { getDb } = require('../database');
 const { syncMemberRobloxRoles } = require('../utils/robloxSync');
@@ -8,7 +7,8 @@ const { syncMemberRobloxRoles } = require('../utils/robloxSync');
 const CODE_WORDS = [
     'grandway', 'shopping', 'fresh', 'checkout', 'aisle', 'produce',
     'cart', 'market', 'grocer', 'bakery', 'organic', 'counter',
-    'register', 'clerk', 'supermarket', 'basket', 'express', 'receipt'
+    'register', 'clerk', 'supermarket', 'basket', 'express', 'receipt',
+    'manager', 'quality', 'service', 'inventory', 'customer', 'value'
 ];
 
 function generateVerificationCode() {
@@ -39,11 +39,11 @@ async function resolveRobloxUser(username) {
 }
 
 /**
- * Fetch Roblox user description (bio)
+ * Fetch Roblox user description (bio) & profile details
  */
 async function fetchRobloxUserBio(robloxId) {
     const res = await fetch(`https://users.roblox.com/v1/users/${robloxId}`, {
-        headers: { 'User-Agent': 'DiscordBot' },
+        headers: { 'User-Agent': 'GrandwayVerificationBot' },
         signal: AbortSignal.timeout(5000)
     });
     if (!res.ok) return null;
@@ -51,7 +51,8 @@ async function fetchRobloxUserBio(robloxId) {
     return {
         description: data.description || '',
         name: data.name,
-        displayName: data.displayName
+        displayName: data.displayName || data.name,
+        created: data.created
     };
 }
 
@@ -61,10 +62,10 @@ async function fetchRobloxUserBio(robloxId) {
 async function fetchRobloxGroupRank(robloxId, groupId) {
     try {
         const res = await fetch(`https://groups.roblox.com/v2/users/${robloxId}/groups/roles`, {
-            headers: { 'User-Agent': 'DiscordBot' },
+            headers: { 'User-Agent': 'GrandwayVerificationBot' },
             signal: AbortSignal.timeout(5000)
         });
-        if (!res.ok) return { rankNumber: 0, rankName: 'Guest' };
+        if (!res.ok) return { rankNumber: 0, rankName: 'Non-Member / Guest' };
         const data = await res.json();
         if (data.data) {
             const grp = data.data.find(g => g.group && g.group.id == groupId);
@@ -73,14 +74,14 @@ async function fetchRobloxGroupRank(robloxId, groupId) {
             }
         }
     } catch (e) {}
-    return { rankNumber: 0, rankName: 'Guest' };
+    return { rankNumber: 0, rankName: 'Non-Member / Guest' };
 }
 
 module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('verify')
-            .setDescription('Verify your Roblox account with Grandway Shopping using your Roblox Profile Bio')
+            .setDescription('Link & verify your Roblox account with Grandway Shopping using your Profile Bio')
             .addStringOption(opt => opt.setName('username').setDescription('Your exact Roblox username').setRequired(true)),
         async execute(interaction) {
             await interaction.deferReply({ ephemeral: true });
@@ -98,7 +99,13 @@ module.exports = [
             const robloxUsername = robloxUser.name;
             const code = generateVerificationCode();
 
-            // Save pending verification session (expires after 15 minutes)
+            // Fetch group rank and profile details for advanced preview
+            const [{ rankNumber, rankName }, userDetails] = await Promise.all([
+                fetchRobloxGroupRank(robloxId, config.robloxGroupId),
+                fetchRobloxUserBio(robloxId).catch(() => null)
+            ]);
+
+            // Save pending verification session (valid for 15 minutes)
             pendingVerifications.set(interaction.user.id, {
                 code,
                 robloxId,
@@ -106,22 +113,31 @@ module.exports = [
                 createdAt: Date.now()
             });
 
+            const accountAge = userDetails && userDetails.created
+                ? Math.floor((Date.now() - new Date(userDetails.created).getTime()) / (1000 * 60 * 60 * 24))
+                : 'Unknown';
+
             const embed = new EmbedBuilder()
-                .setTitle(`🔐 Grandway Shopping Roblox Verification`)
+                .setTitle(`🔐 Grandway Shopping Profile Bio Verification`)
                 .setDescription(
-                    `Hello <@${interaction.user.id}>! To verify that you own the Roblox account **${robloxUsername}** (ID: \`${robloxId}\`), please follow these steps:\n\n` +
-                    `### 📋 Step 1: Copy your unique verification code\n` +
+                    `Hello <@${interaction.user.id}>! To verify ownership of **${robloxUsername}**, please complete the bio challenge:\n\n` +
+                    `### 🔑 Step 1: Copy your verification code\n` +
                     `\`\`\`\n${code}\n\`\`\`\n` +
-                    `### 📋 Step 2: Paste it into your Roblox Profile 'About' / Bio\n` +
-                    `1. Visit your profile at: [Roblox Profile](https://www.roblox.com/users/${robloxId}/profile)\n` +
-                    `2. Click **Edit Profile** or go to Account Settings.\n` +
-                    `3. Paste the code anywhere in your **About Me** / Bio and click **Save**.\n\n` +
-                    `### 📋 Step 3: Confirm Verification\n` +
-                    `Once saved, click the green **Confirm Verification** button below. The bot will check your profile bio and assign your roles!`
+                    `### 📝 Step 2: Paste it into your Roblox Profile 'About' / Bio\n` +
+                    `1. Visit your profile: [Roblox Profile](https://www.roblox.com/users/${robloxId}/profile)\n` +
+                    `2. Open your Profile Settings or Edit Profile on Roblox.\n` +
+                    `3. Paste the code into your **About** section and click **Save**.\n\n` +
+                    `### ⚡ Step 3: Click 'Confirm Verification'\n` +
+                    `Click the button below! Once verified, you will immediately receive your **Verified Member** role and your exact **${rankName}** group rank role!`
+                )
+                .addFields(
+                    { name: '👤 Roblox User', value: `**${robloxUsername}** (\`${robloxId}\`)`, inline: true },
+                    { name: '🏬 Group Rank', value: `**${rankName}** (Rank ${rankNumber})`, inline: true },
+                    { name: '📅 Account Age', value: `${accountAge} days`, inline: true }
                 )
                 .setColor(config.colors.secondary)
                 .setThumbnail(`https://www.roblox.com/headshot-thumbnail/image?userId=${robloxId}&width=150&height=150&format=png`)
-                .setFooter({ text: 'Code expires in 15 minutes • You can remove the code from your bio after verification' })
+                .setFooter({ text: 'Code expires in 15 minutes • You may delete the code from your bio after verification' })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
@@ -164,7 +180,6 @@ module.exports = [
 
             if (member) {
                 await syncMemberRobloxRoles(member, rankNumber, rankName);
-                // Also update nickname if desired
                 try {
                     await member.setNickname(`${verif.roblox_username} (${rankName})`);
                 } catch (e) {}
@@ -185,7 +200,6 @@ module.exports = [
     }
 ];
 
-// Export helpers for button listener
 module.exports.pendingVerifications = pendingVerifications;
 module.exports.fetchRobloxUserBio = fetchRobloxUserBio;
 module.exports.fetchRobloxGroupRank = fetchRobloxGroupRank;

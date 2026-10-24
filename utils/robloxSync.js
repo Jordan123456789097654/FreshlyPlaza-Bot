@@ -1,29 +1,18 @@
 const config = require('../config');
+const fs = require('fs');
+const path = require('path');
 
-// Group rank number to role key mapping for Roblox Group 505768378
-const RANK_MAPPING = [
-    { minRank: 255, roleKey: 'founder' },
-    { minRank: 254, roleKey: 'coFounder' },
-    { minRank: 253, roleKey: 'boardOfDirectors' },
-    { minRank: 250, roleKey: 'cSuite' },
-    { minRank: 212, roleKey: 'leadDev' },
-    { minRank: 211, roleKey: 'groupDev' },
-    { minRank: 200, roleKey: 'hr' },
-    { minRank: 100, roleKey: 'corporateOfficer' },
-    { minRank: 34,  roleKey: 'storeManager' },
-    { minRank: 33,  roleKey: 'assistantManager' },
-    { minRank: 32,  roleKey: 'supervisor' },
-    { minRank: 31,  roleKey: 'shiftLead' },
-    { minRank: 30,  roleKey: 'mr' },
-    { minRank: 20,  roleKey: 'security' },
-    { minRank: 13,  roleKey: 'seniorAssociate' },
-    { minRank: 11,  roleKey: 'storeAssociate' },
-    { minRank: 10,  roleKey: 'trainee' },
-    { minRank: 1,   roleKey: 'customer' }
-];
+let hierarchyData = null;
+try {
+    hierarchyData = JSON.parse(fs.readFileSync(path.join(__dirname, '../scripts/hierarchy_roles.json'), 'utf8'));
+} catch (e) {
+    console.warn('Could not read hierarchy_roles.json:', e.message);
+}
 
 /**
  * Syncs Discord roles for a guild member based on their Roblox group rank
+ * Assigns their EXACT matching Roblox Group rank role (e.g. "Store Manager", "Senior Security Officer", etc.)
+ * PLUS contextual group tier roles (Staff, MR, HR, Verified, Customer).
  * @param {import('discord.js').GuildMember} member
  * @param {number} rankNumber Roblox group rank (0-255)
  * @param {string} rankName Roblox group role name
@@ -31,71 +20,88 @@ const RANK_MAPPING = [
 async function syncMemberRobloxRoles(member, rankNumber, rankName) {
     if (!member || !member.guild) return [];
 
-    const rolesToAdd = [];
-    const rolesToRemove = [];
+    const rolesToAdd = new Set();
+    const rolesToRemove = new Set();
 
-    // Verified role is always granted
-    if (config.roles.verified && !member.roles.cache.has(config.roles.verified)) {
-        rolesToAdd.push(config.roles.verified);
+    // 1. Core verification role
+    if (config.roles.verified) {
+        rolesToAdd.add(config.roles.verified);
     }
 
-    // Customer role is granted to all group members & customers
-    if (config.roles.customer && !member.roles.cache.has(config.roles.customer)) {
-        rolesToAdd.push(config.roles.customer);
-    }
-
-    // Remove unverified role if present
+    // 2. Remove unverified role if present
     if (config.roles.unverified && member.roles.cache.has(config.roles.unverified)) {
-        rolesToRemove.push(config.roles.unverified);
+        rolesToRemove.add(config.roles.unverified);
     }
 
-    // Determine staff level
-    if (rankNumber >= 10) {
-        // Any rank 10+ is a staff member
-        if (config.roles.staff && !member.roles.cache.has(config.roles.staff)) {
-            rolesToAdd.push(config.roles.staff);
-        }
+    // 3. Customer role is granted to all group members / customers
+    if (config.roles.customer) {
+        rolesToAdd.add(config.roles.customer);
     }
 
-    // Determine MR level (30 - 99)
-    if (rankNumber >= 30 && rankNumber < 100) {
-        if (config.roles.mr && !member.roles.cache.has(config.roles.mr)) {
-            rolesToAdd.push(config.roles.mr);
+    // 4. EXACT MATCH FOR ROBLOX GROUP RANK
+    if (hierarchyData && hierarchyData.rankToRoleId) {
+        const exactRoleId = hierarchyData.rankToRoleId[String(rankNumber)];
+        if (exactRoleId) {
+            rolesToAdd.add(exactRoleId);
         }
-    }
 
-    // Determine HR level (100+)
-    if (rankNumber >= 100) {
-        if (config.roles.hr && !member.roles.cache.has(config.roles.hr)) {
-            rolesToAdd.push(config.roles.hr);
-        }
-        if (config.roles.mr && !member.roles.cache.has(config.roles.mr)) {
-            rolesToAdd.push(config.roles.mr);
-        }
-    }
-
-    // Specific title role
-    for (const mapping of RANK_MAPPING) {
-        if (rankNumber >= mapping.minRank) {
-            const roleId = config.roles[mapping.roleKey];
-            if (roleId && !member.roles.cache.has(roleId)) {
-                rolesToAdd.push(roleId);
+        // Remove any previous exact rank roles they no longer hold (if they were promoted/demoted)
+        for (const [rNumStr, rId] of Object.entries(hierarchyData.rankToRoleId)) {
+            const num = Number(rNumStr);
+            if (num !== rankNumber && num > 1) { // don't remove customer
+                if (member.roles.cache.has(rId) && rId !== exactRoleId) {
+                    rolesToRemove.add(rId);
+                }
             }
-            break;
         }
     }
 
-    const applied = [];
-    if (rolesToAdd.length > 0) {
-        await member.roles.add(rolesToAdd, `Roblox Group Sync: ${rankName} (Rank ${rankNumber})`).catch(e => console.warn('Could not add roles:', e.message));
-        applied.push(...rolesToAdd);
+    // 5. Tiered Organizational Roles
+    // Trainee / Staff Tier (Rank 10+)
+    if (rankNumber >= 10) {
+        if (config.roles.staff) rolesToAdd.add(config.roles.staff);
+    } else {
+        if (config.roles.staff && member.roles.cache.has(config.roles.staff)) {
+            rolesToRemove.add(config.roles.staff);
+        }
     }
 
-    if (rolesToRemove.length > 0) {
-        await member.roles.remove(rolesToRemove, `Roblox Group Sync: Verified`).catch(e => console.warn('Could not remove roles:', e.message));
+    // Middle Management (MR) Tier (Rank 30 to 99)
+    if (rankNumber >= 30 && rankNumber < 100) {
+        if (config.roles.mr) rolesToAdd.add(config.roles.mr);
     }
 
-    return applied;
+    // High Rank (HR) Tier (Rank 100 to 249)
+    if (rankNumber >= 100) {
+        if (config.roles.hr) rolesToAdd.add(config.roles.hr);
+        if (config.roles.mr) rolesToAdd.add(config.roles.mr); // HR inherits MR permissions
+    }
+
+    // Executive Suite Tier (Rank 250+)
+    if (rankNumber >= 250) {
+        if (config.roles.cSuite) rolesToAdd.add(config.roles.cSuite);
+        if (config.roles.hr) rolesToAdd.add(config.roles.hr);
+        if (config.roles.mr) rolesToAdd.add(config.roles.mr);
+    }
+
+    // Specific Founder / Co-Founder
+    if (rankNumber === 255 && config.roles.founder) rolesToAdd.add(config.roles.founder);
+    if (rankNumber === 254 && config.roles.coFounder) rolesToAdd.add(config.roles.coFounder);
+    if (rankNumber === 253 && config.roles.boardOfDirectors) rolesToAdd.add(config.roles.boardOfDirectors);
+
+    // Filter out roles already on member
+    const finalAddList = [...rolesToAdd].filter(id => id && !member.roles.cache.has(id));
+    const finalRemoveList = [...rolesToRemove].filter(id => id && member.roles.cache.has(id));
+
+    if (finalAddList.length > 0) {
+        await member.roles.add(finalAddList, `Roblox Group Sync: ${rankName} (Rank ${rankNumber})`).catch(e => console.warn('Role add notice:', e.message));
+    }
+
+    if (finalRemoveList.length > 0) {
+        await member.roles.remove(finalRemoveList, `Roblox Group Sync: Outdated Ranks`).catch(e => console.warn('Role remove notice:', e.message));
+    }
+
+    return finalAddList;
 }
 
-module.exports = { syncMemberRobloxRoles, RANK_MAPPING };
+module.exports = { syncMemberRobloxRoles };
