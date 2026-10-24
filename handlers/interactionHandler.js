@@ -212,8 +212,170 @@ async function handleInteraction(interaction) {
             }
         }
 
-        // Guess The Number (GTN) Interactive Buttons
-        if (customId.startsWith('gtn_')) {
+        // Bug Report Panel "Submit Bug Report" Button
+        if (customId === 'btn_open_bug_modal') {
+            const modal = new ModalBuilder()
+                .setCustomId('modal_submit_bug_report')
+                .setTitle('Submit Bug Report');
+
+            const titleInput = new TextInputBuilder()
+                .setCustomId('bug_title')
+                .setLabel('Bug Summary / Title')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('e.g. Milk scan freezes checkout register')
+                .setRequired(true)
+                .setMaxLength(100);
+
+            const detailsInput = new TextInputBuilder()
+                .setCustomId('bug_details')
+                .setLabel('Detailed Bug Description')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Explain what happened, what went wrong, and where in the store.')
+                .setRequired(true)
+                .setMaxLength(1000);
+
+            const stepsInput = new TextInputBuilder()
+                .setCustomId('bug_steps')
+                .setLabel('Steps to Reproduce')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('1. Pick up item, 2. Place on counter, 3. Press pay...')
+                .setRequired(false)
+                .setMaxLength(500);
+
+            const evidenceInput = new TextInputBuilder()
+                .setCustomId('bug_evidence')
+                .setLabel('Evidence / Screenshot / Clip Link')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('https://medal.tv/... or https://imgur.com/...')
+                .setRequired(false)
+                .setMaxLength(250);
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(titleInput),
+                new ActionRowBuilder().addComponents(detailsInput),
+                new ActionRowBuilder().addComponents(stepsInput),
+                new ActionRowBuilder().addComponents(evidenceInput)
+            );
+
+            return await interaction.showModal(modal);
+        }
+
+        // Developer Action Buttons on Bug Report Embeds
+        if (customId.startsWith('bug_action_')) {
+            const member = interaction.member;
+            const isStaffOrDev = member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+                member.roles.cache.some(r => {
+                    const n = r.name.toLowerCase();
+                    return n.includes('developer') || n.includes('management') || n.includes('high rank') || n.includes('founder') || n.includes('director');
+                });
+
+            if (!isStaffOrDev) {
+                return interaction.reply({
+                    content: '❌ Only Grandway developers and leadership can manage bug reports.',
+                    ephemeral: true
+                });
+            }
+
+            const parts = customId.split('_'); // ['bug', 'action', 'investigate'/'known'/'resolve'/'invalid', '12']
+            const actionType = parts[2];
+            const bugId = Number(parts[3]);
+
+            const data = db.getData();
+            const bug = (data.bugs || []).find(b => b.id === bugId);
+            if (!bug) {
+                return interaction.reply({ content: '❌ Bug report record not found.', ephemeral: true });
+            }
+
+            // If action is resolve or invalid, show a prompt modal for notes
+            if (actionType === 'resolve' || actionType === 'invalid') {
+                const modal = new ModalBuilder()
+                    .setCustomId(`modal_bug_finish_${actionType}_${bugId}`)
+                    .setTitle(actionType === 'resolve' ? 'Resolve Bug Report' : 'Mark Bug as Invalid');
+
+                const notesInput = new TextInputBuilder()
+                    .setCustomId('dev_notes')
+                    .setLabel('Resolution / Developer Notes')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder(actionType === 'resolve' ? 'Fixed in latest supermarket patch v2.4...' : 'Unable to reproduce with provided steps...')
+                    .setRequired(true)
+                    .setMaxLength(500);
+
+                modal.addComponents(new ActionRowBuilder().addComponents(notesInput));
+                return await interaction.showModal(modal);
+            }
+
+            await interaction.deferReply({ ephemeral: true });
+
+            const { buildBugEmbed, buildBugActionButtons } = require('../commands/bug');
+            const targetChannel = interaction.guild.channels.cache.get(config.channels.bugsReport);
+
+            if (actionType === 'investigate') {
+                bug.status = 'INVESTIGATING';
+                bug.handled_by = interaction.user.id;
+                db.save();
+
+                // Update Embed and buttons
+                const updatedEmbed = buildBugEmbed(bug);
+                const updatedButtons = buildBugActionButtons(bug.id, bug.status);
+
+                try {
+                    await interaction.message.edit({ embeds: [updatedEmbed], components: updatedButtons });
+                } catch (e) {}
+
+                // Send DM notification to reporter
+                try {
+                    const reporter = await interaction.client.users.fetch(bug.user_id);
+                    await reporter.send({
+                        content: `🔍 **Grandway Bug Update:** Your bug report **#${bug.id} (${bug.title})** is now being investigated by <@${interaction.user.id}>!`
+                    });
+                } catch (dmErr) {}
+
+                // Notify thread if exists
+                if (bug.thread_id) {
+                    const thread = interaction.guild.channels.cache.get(bug.thread_id);
+                    if (thread) await thread.send(`🔍 <@${interaction.user.id}> has marked this bug as **Under Investigation**.`);
+                }
+
+                return interaction.editReply({ content: `✅ Marked Bug **#${bug.id}** as Under Investigation!` });
+            }
+
+            if (actionType === 'known') {
+                bug.status = 'KNOWN_ISSUE';
+                bug.handled_by = interaction.user.id;
+                db.save();
+
+                const updatedEmbed = buildBugEmbed(bug);
+                const updatedButtons = buildBugActionButtons(bug.id, bug.status);
+
+                try {
+                    await interaction.message.edit({ embeds: [updatedEmbed], components: updatedButtons });
+                } catch (e) {}
+
+                // Post into #known-bugs
+                const knownBugsChan = interaction.guild.channels.cache.get(config.channels.knownBugs);
+                if (knownBugsChan) {
+                    const knownEmbed = EmbedBuilder.from(updatedEmbed)
+                        .setTitle(`📌 Known Issue #${bug.id} — ${bug.title}`)
+                        .setColor(0xE67E22);
+                    await knownBugsChan.send({ embeds: [knownEmbed] }).catch(() => {});
+                }
+
+                // Notify reporter
+                try {
+                    const reporter = await interaction.client.users.fetch(bug.user_id);
+                    await reporter.send({
+                        content: `📌 **Grandway Bug Update:** Your bug report **#${bug.id} (${bug.title})** has been confirmed as a **Known Issue** and listed for an upcoming store patch!`
+                    });
+                } catch (dmErr) {}
+
+                if (bug.thread_id) {
+                    const thread = interaction.guild.channels.cache.get(bug.thread_id);
+                    if (thread) await thread.send(`📌 Marked as **Known Issue** and listed in <#${config.channels.knownBugs}>.`);
+                }
+
+                return interaction.editReply({ content: `✅ Marked Bug **#${bug.id}** as Known Issue & copied to <#${config.channels.knownBugs}>!` });
+            }
+        }
             const { handleGtnButton } = require('./gtnHandler');
             return await handleGtnButton(interaction);
         }
@@ -1680,6 +1842,143 @@ async function handleInteraction(interaction) {
             const usernameInput = interaction.fields.getTextInputValue('roblox_username');
             const verifyModule = require('../commands/verify');
             return await verifyModule.startVerificationProcess(interaction, usernameInput);
+        }
+
+        // Bug Report Modal Submission from #bug-reports panel
+        if (interaction.customId === 'modal_submit_bug_report') {
+            await interaction.deferReply({ ephemeral: true });
+            const title = interaction.fields.getTextInputValue('bug_title');
+            const details = interaction.fields.getTextInputValue('bug_details');
+            const steps = interaction.fields.getTextInputValue('bug_steps') || 'None provided';
+            const evidence = interaction.fields.getTextInputValue('bug_evidence') || 'None';
+
+            const data = db.getData();
+            if (!data.bugs) data.bugs = [];
+
+            const newId = data.bugs.length + 1;
+            const bugRecord = {
+                id: newId,
+                user_id: interaction.user.id,
+                title,
+                details,
+                severity: 'moderate',
+                category: 'other',
+                steps,
+                evidence,
+                status: 'PENDING',
+                created_at: new Date().toISOString(),
+                handled_by: null,
+                resolution_notes: null,
+                message_id: null,
+                thread_id: null
+            };
+
+            data.bugs.push(bugRecord);
+            db.save();
+
+            const { buildBugEmbed, buildBugActionButtons } = require('../commands/bug');
+            const bugsChannel = interaction.guild.channels.cache.get(config.channels.bugsReport);
+
+            if (bugsChannel) {
+                const embed = buildBugEmbed(bugRecord);
+                const buttons = buildBugActionButtons(newId, 'PENDING');
+                const msg = await bugsChannel.send({ embeds: [embed], components: buttons });
+
+                bugRecord.message_id = msg.id;
+
+                // Automatic public thread
+                try {
+                    const thread = await msg.startThread({
+                        name: `Bug #${newId} — ${title.slice(0, 50)}`,
+                        autoArchiveDuration: 1440
+                    });
+                    bugRecord.thread_id = thread.id;
+                    await thread.send(`👋 Discussion thread for Bug Report **#${newId}**. Players can share additional repro steps and screenshots here.`);
+                } catch (tErr) {}
+
+                db.save();
+            }
+
+            return interaction.editReply({
+                content: `✅ Bug report **#${newId}** has been submitted! Our development team has been notified in <#${config.channels.bugsReport}>.`
+            });
+        }
+
+        // Bug Report Developer Finish Modal (Resolve / Invalid)
+        if (interaction.customId.startsWith('modal_bug_finish_')) {
+            await interaction.deferReply({ ephemeral: true });
+            const parts = interaction.customId.split('_'); // ['modal', 'bug', 'finish', 'resolve'/'invalid', '12']
+            const actionType = parts[3];
+            const bugId = Number(parts[4]);
+            const notes = interaction.fields.getTextInputValue('dev_notes');
+
+            const data = db.getData();
+            const bug = (data.bugs || []).find(b => b.id === bugId);
+            if (!bug) {
+                return interaction.editReply({ content: '❌ Bug record not found.' });
+            }
+
+            bug.status = actionType === 'resolve' ? 'RESOLVED' : 'INVALID';
+            bug.handled_by = interaction.user.id;
+            bug.resolution_notes = notes;
+            db.save();
+
+            const { buildBugEmbed, buildBugActionButtons } = require('../commands/bug');
+            const bugsChannel = interaction.guild.channels.cache.get(config.channels.bugsReport);
+
+            // Update main embed in #bug-reports
+            if (bugsChannel && bug.message_id) {
+                try {
+                    const msg = await bugsChannel.messages.fetch(bug.message_id);
+                    const updatedEmbed = buildBugEmbed(bug);
+                    const updatedButtons = buildBugActionButtons(bug.id, bug.status);
+                    await msg.edit({ embeds: [updatedEmbed], components: updatedButtons });
+                } catch (e) {}
+            }
+
+            // If resolved, post to #known-bugs as resolved or update it
+            if (actionType === 'resolve') {
+                const knownBugsChan = interaction.guild.channels.cache.get(config.channels.knownBugs);
+                if (knownBugsChan) {
+                    const resolvedEmbed = buildBugEmbed(bug);
+                    await knownBugsChan.send({ embeds: [resolvedEmbed] }).catch(() => {});
+                }
+            }
+
+            // Close discussion thread if exists
+            if (bug.thread_id) {
+                try {
+                    const thread = interaction.guild.channels.cache.get(bug.thread_id);
+                    if (thread) {
+                        await thread.send(`🔒 Bug **#${bug.id}** marked as **${bug.status}** by <@${interaction.user.id}>:\n> ${notes}`);
+                        await thread.setArchived(true);
+                    }
+                } catch (e) {}
+            }
+
+            // Send notification DM to the reporter
+            try {
+                const reporter = await interaction.client.users.fetch(bug.user_id);
+                if (reporter) {
+                    const dmEmbed = new EmbedBuilder()
+                        .setTitle(`🐛 Grandway Bug Report #${bug.id} Status Update`)
+                        .setDescription(
+                            `Your bug report **"${bug.title}"** has been updated by **${interaction.user.username}**!\n\n` +
+                            `• **New Status:** ${actionType === 'resolve' ? '✅ **Resolved & Patched**' : '❌ **Marked as Invalid / Cannot Reproduce**'}\n` +
+                            `• **Developer Notes:**\n> ${notes}\n\n` +
+                            `Thank you for helping keep Grandway Shopping running smoothly!`
+                        )
+                        .setColor(actionType === 'resolve' ? config.colors.primary : config.colors.neutral)
+                        .setFooter({ text: 'Grandway Shopping Bug Tracking System' })
+                        .setTimestamp();
+
+                    await reporter.send({ embeds: [dmEmbed] });
+                }
+            } catch (e) {}
+
+            return interaction.editReply({
+                content: `✅ Successfully marked Bug Report **#${bug.id}** as **${bug.status}**!`
+            });
         }
 
         // Verify Account Modal
