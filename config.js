@@ -59,35 +59,49 @@ module.exports = {
         "serverBanLogs": "1563651175796973598"
 },
 
-    // Role IDs
+        // Role IDs
     roles: {
-        shiftPing: '1558519063716569152',
-        trainingPing: '1558519063716569153',
-        eventsPing: '1558519063716569156',
-        announcementsPing: '1558519063716569155',
-        staff: '1558519063737802844',
-        mr: '1558519063729405989',
-        hr: '1558519063729405990',
-        trainee: '1558519063737802843',
-        customer: '1558519063737802842',
-        honeypot: '1558519063683010659',
-        loa: '1558519063808974918',
-        underInvestigation: '1558519063683010659',
-        birthday: '1558519063649587309',
-        verified: '1558519063729405983',
-        leadDev: '1558519063808974916',
-        groupDev: '1558519063808974917',
-        bestDev: '1558519063808974916',
-        supportGeneral: '1560274559087673364',
-        supportReport: '1560274579086250084',
-        supportManagement: '1560274579400958042',
-        supportTechnical: '1560274579111411785',
-        supportAppeals: '1560274579082182778'
+        "shiftPing": "1563652422252101746",
+        "trainingPing": "1563652419206905929",
+        "eventsPing": "1563652416811966617",
+        "announcementsPing": "1563652413703856260",
+        "qotdPing": "1563652410587750543",
+        "staff": "1563652471186923675",
+        "mr": "1563652488869978145",
+        "hr": "1563652504116404304",
+        "cSuite": "1563652509459816539",
+        "boardOfDirectors": "1563652511745839267",
+        "founder": "1563652517768732702",
+        "coFounder": "1563652514702958755",
+        "trainee": "1563652458264400052",
+        "storeAssociate": "1563652461351141589",
+        "seniorAssociate": "1563652464027373631",
+        "security": "1563652468695507044",
+        "shiftLead": "1563652477197357178",
+        "supervisor": "1563652480150147226",
+        "assistantManager": "1563652483111461086",
+        "storeManager": "1563652485976170539",
+        "corporateOfficer": "1563652500769480895",
+        "customer": "1563652430091124900",
+        "unverified": "1563652428119670904",
+        "honeypot": "1563652408431607828",
+        "loa": "1563652455890296842",
+        "underInvestigation": "1563652408431607828",
+        "birthday": "1563652430091124900",
+        "verified": "1563652433039851631",
+        "leadDev": "1563652497409843320",
+        "groupDev": "1563652494825885727",
+        "bestDev": "1563652497409843320",
+        "supportGeneral": "1563652450924101705",
+        "supportReport": "1563652447828836362",
+        "supportManagement": "1563652442913247292",
+        "supportTechnical": "1563652440660770918",
+        "supportAppeals": "1563652437976416376"
     },
 
     // Auto Roles assigned on member join
     autoRoles: [
-        '1558519063737802842' // 🛍️ │ Store Customer
+        '1563652430091124900' // 🛍️ │ Store Customer
     ],
 
     // LOA Ping Protection

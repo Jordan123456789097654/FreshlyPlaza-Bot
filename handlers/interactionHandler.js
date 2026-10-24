@@ -80,6 +80,91 @@ async function handleInteraction(interaction) {
     if (interaction.isButton()) {
         const customId = interaction.customId;
 
+        // Roblox Bio Verification Confirm Button
+        if (customId.startsWith('verify_confirm_')) {
+            await interaction.deferReply({ ephemeral: true });
+            const verifyModule = require('../commands/verify');
+            const pendingVerifications = verifyModule.pendingVerifications;
+            const session = pendingVerifications.get(interaction.user.id);
+
+            if (!session) {
+                return interaction.editReply({
+                    content: '⚠️ No pending verification session found (it may have expired). Please run `/verify` again.'
+                });
+            }
+
+            const robloxId = session.robloxId;
+            const expectedCode = session.code;
+
+            try {
+                const bioData = await verifyModule.fetchRobloxUserBio(robloxId);
+                if (!bioData) {
+                    return interaction.editReply({
+                        content: '❌ Failed to communicate with Roblox servers. Please wait a moment and try again.'
+                    });
+                }
+
+                const currentBio = bioData.description || '';
+                if (!currentBio.includes(expectedCode)) {
+                    return interaction.editReply({
+                        content: `❌ Verification code not detected in your Roblox profile bio!\n\n` +
+                            `• **Expected code**: \`${expectedCode}\`\n` +
+                            `• **Your Roblox Profile**: https://www.roblox.com/users/${robloxId}/profile\n\n` +
+                            `Please make sure you have saved the code into your **About** section on Roblox and try clicking **Confirm Verification** again.`
+                    });
+                }
+
+                // Code found! Mark verified in database
+                await db.setVerification(interaction.user.id, robloxId, session.robloxUsername);
+                pendingVerifications.delete(interaction.user.id);
+
+                // Fetch group rank and assign roles
+                const { fetchRobloxGroupRank } = verifyModule;
+                const { syncMemberRobloxRoles } = require('../utils/robloxSync');
+                const { rankNumber, rankName } = await fetchRobloxGroupRank(robloxId, config.robloxGroupId);
+
+                const member = interaction.member;
+                if (member) {
+                    await syncMemberRobloxRoles(member, rankNumber, rankName);
+                    try {
+                        await member.setNickname(`${session.robloxUsername} (${rankName})`);
+                    } catch (e) {}
+                }
+
+                const successEmbed = new EmbedBuilder()
+                    .setTitle('🎉 Verification Successful!')
+                    .setDescription(
+                        `Welcome to **Grandway Shopping**, **${session.robloxUsername}**!\n\n` +
+                        `Your Discord account has been linked to your Roblox profile and verified via your Profile Bio.`
+                    )
+                    .addFields(
+                        { name: '👤 Roblox Account', value: `[${session.robloxUsername}](https://www.roblox.com/users/${robloxId}/profile) (\`${robloxId}\`)`, inline: true },
+                        { name: '🏬 Group Rank', value: `**${rankName}** (Rank ${rankNumber})`, inline: true },
+                        { name: '🏷️ Assigned Roles', value: `<@&${config.roles.verified}> • <@&${config.roles.customer}>`, inline: true }
+                    )
+                    .setColor(config.colors.primary)
+                    .setThumbnail(`https://www.roblox.com/headshot-thumbnail/image?userId=${robloxId}&width=150&height=150&format=png`)
+                    .setFooter({ text: 'You may now remove the verification code from your Roblox bio' })
+                    .setTimestamp();
+
+                return interaction.editReply({ embeds: [successEmbed] });
+            } catch (err) {
+                console.error('Error during bio verification check:', err);
+                return interaction.editReply({
+                    content: `❌ An unexpected error occurred while verifying your profile: ${err.message}`
+                });
+            }
+        }
+
+        // Roblox Bio Verification Cancel Button
+        if (customId.startsWith('verify_cancel_')) {
+            const verifyModule = require('../commands/verify');
+            if (verifyModule.pendingVerifications) {
+                verifyModule.pendingVerifications.delete(interaction.user.id);
+            }
+            return interaction.reply({ content: '🚫 Verification canceled.', ephemeral: true });
+        }
+
         // Guess The Number (GTN) Interactive Buttons
         if (customId.startsWith('gtn_')) {
             const { handleGtnButton } = require('./gtnHandler');
