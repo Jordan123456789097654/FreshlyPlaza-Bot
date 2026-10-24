@@ -104,4 +104,4 @@ async function syncMemberRobloxRoles(member, rankNumber, rankName) {
     return finalAddList;
 }
 
-module.exports = { syncMemberRobloxRoles };
+module.exports = { syncMemberRobloxRoles, hierarchyData };

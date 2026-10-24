@@ -131,16 +131,32 @@ async function handleInteraction(interaction) {
                     } catch (e) {}
                 }
 
+                const assignedRoleMentions = [];
+                const hierarchyData = require('../utils/robloxSync').hierarchyData;
+                if (hierarchyData && hierarchyData.rankToRoleId && hierarchyData.rankToRoleId[String(rankNumber)]) {
+                    assignedRoleMentions.push(`<@&${hierarchyData.rankToRoleId[String(rankNumber)]}>`);
+                }
+                if (rankNumber >= 250 && config.roles.cSuite) assignedRoleMentions.push(`<@&${config.roles.cSuite}>`);
+                if (rankNumber >= 100 && config.roles.hr) assignedRoleMentions.push(`<@&${config.roles.hr}>`);
+                if (rankNumber >= 30 && config.roles.mr) assignedRoleMentions.push(`<@&${config.roles.mr}>`);
+                if (rankNumber >= 10 && config.roles.staff) assignedRoleMentions.push(`<@&${config.roles.staff}>`);
+                if (config.roles.verified) assignedRoleMentions.push(`<@&${config.roles.verified}>`);
+                if (config.roles.customer) assignedRoleMentions.push(`<@&${config.roles.customer}>`);
+
+                const displayRolesText = assignedRoleMentions.length > 0 
+                    ? [...new Set(assignedRoleMentions)].join(' • ') 
+                    : `<@&${config.roles.verified}> • <@&${config.roles.customer}>`;
+
                 const successEmbed = new EmbedBuilder()
                     .setTitle('🎉 Verification Successful!')
                     .setDescription(
                         `Welcome to **Grandway Shopping**, **${session.robloxUsername}**!\n\n` +
-                        `Your Discord account has been linked to your Roblox profile and verified via your Profile Bio.`
+                        `Your Discord account has been verified via your Roblox profile bio and synced with your Roblox group rank.`
                     )
                     .addFields(
                         { name: '👤 Roblox Account', value: `[${session.robloxUsername}](https://www.roblox.com/users/${robloxId}/profile) (\`${robloxId}\`)`, inline: true },
                         { name: '🏬 Group Rank', value: `**${rankName}** (Rank ${rankNumber})`, inline: true },
-                        { name: '🏷️ Assigned Roles', value: `<@&${config.roles.verified}> • <@&${config.roles.customer}>`, inline: true }
+                        { name: '🏷️ Assigned Roles', value: displayRolesText, inline: false }
                     )
                     .setColor(config.colors.primary)
                     .setThumbnail(`https://www.roblox.com/headshot-thumbnail/image?userId=${robloxId}&width=150&height=150&format=png`)
