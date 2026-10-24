@@ -186,6 +186,32 @@ async function handleInteraction(interaction) {
             return await interaction.showModal(modal);
         }
 
+        // Reaction Role Toggle Buttons
+        if (customId.startsWith('rr_toggle_')) {
+            const roleKey = customId.replace('rr_toggle_', '');
+            const roleId = config.roles[roleKey];
+            const member = interaction.member;
+
+            if (!roleId || !member) {
+                return interaction.reply({ content: '❌ Role configuration not found.', ephemeral: true });
+            }
+
+            const hasRole = member.roles.cache.has(roleId);
+            if (hasRole) {
+                await member.roles.remove(roleId, 'Reaction Role Toggle');
+                return interaction.reply({
+                    content: `🔴 Removed <@&${roleId}> notification role.`,
+                    ephemeral: true
+                });
+            } else {
+                await member.roles.add(roleId, 'Reaction Role Toggle');
+                return interaction.reply({
+                    content: `🟢 Added <@&${roleId}> notification role! You will now receive pings for this category.`,
+                    ephemeral: true
+                });
+            }
+        }
+
         // Guess The Number (GTN) Interactive Buttons
         if (customId.startsWith('gtn_')) {
             const { handleGtnButton } = require('./gtnHandler');

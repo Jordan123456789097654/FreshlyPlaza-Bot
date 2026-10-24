@@ -17,6 +17,7 @@ module.exports = {
 
         // Channel IDs
     channels: {
+        "reactionRoles": "1563657627152556032",
         "welcome": "1563651075792441556",
         "verification": "1563651078627528746",
         "informationRules": "1563651081567731764",
