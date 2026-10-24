@@ -177,6 +177,33 @@ client.once('clientReady', async () => {
         console.error('[TICKET OVERRIDE] Startup sync failed:', e);
     }
 
+    // Automatically purge & close orphaned tickets from old servers or deleted channels
+    try {
+        const primaryGuild = client.guilds.cache.get(config.guildId);
+        if (primaryGuild) {
+            const db = require('./database').getDb();
+            const tickets = db.getData().tickets || [];
+            let cleaned = 0;
+            for (const t of tickets) {
+                if (t.status !== 'CLOSED' && t.status !== 'RESOLVED_BY_AI') {
+                    const channelExists = primaryGuild.channels.cache.has(t.channel_id);
+                    if (!channelExists) {
+                        t.status = 'CLOSED';
+                        t.closed_at = new Date().toISOString();
+                        t.close_reason = 'Auto-closed: Legacy server migration / channel deleted';
+                        cleaned++;
+                    }
+                }
+            }
+            if (cleaned > 0) {
+                db.save();
+                console.log(`🧹 [CLEANUP] Automatically closed ${cleaned} legacy tickets from old server / deleted channels.`);
+            }
+        }
+    } catch (cleanErr) {
+        console.error('[CLEANUP ERROR]', cleanErr.message);
+    }
+
     // Live Rotating Presence Status (respects overrideStatus)
     let statusIndex = 0;
     const updatePresence = () => {

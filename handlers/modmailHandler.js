@@ -72,10 +72,19 @@ async function createModmailThread({ guild, user, member = null, categoryKey = '
         throw new Error(`You are blacklisted from opening Grandway Shopping ModMail: ${isBanned.reason}`);
     }
 
-    // 2. Check existing active thread
-    const activeTicket = await db.getActiveUserTicket(user.id);
+    // 2. Check existing active thread (auto-closes old server tickets if channel no longer exists)
+    let activeTicket = await db.getActiveUserTicket(user.id, null, guild);
     if (activeTicket) {
-        throw new Error(`You already have an active ModMail thread: <#${activeTicket.channel_id}>. Please close it before opening a new one.`);
+        const channelExists = guild.channels.cache.has(activeTicket.channel_id);
+        if (!channelExists) {
+            activeTicket.status = 'CLOSED';
+            activeTicket.closed_at = new Date().toISOString();
+            activeTicket.close_reason = 'Auto-closed: Legacy server ticket';
+            db.save();
+            activeTicket = null;
+        } else {
+            throw new Error(`You already have an active ModMail thread: <#${activeTicket.channel_id}>. Please close it before opening a new one.`);
+        }
     }
 
     const catConfig = MODMAIL_CATEGORIES[categoryKey] || MODMAIL_CATEGORIES.general;
@@ -232,7 +241,18 @@ async function handleIncomingModmailDm(message, client) {
     }
 
     // Find active ModMail thread
-    const ticket = await db.getActiveUserTicket(message.author.id);
+    const guild = client.guilds.cache.get(config.guildId);
+    let ticket = await db.getActiveUserTicket(message.author.id, null, guild);
+    if (ticket && guild) {
+        const channelExists = guild.channels.cache.has(ticket.channel_id);
+        if (!channelExists) {
+            ticket.status = 'CLOSED';
+            ticket.closed_at = new Date().toISOString();
+            ticket.close_reason = 'Auto-closed: Legacy server ticket';
+            db.save();
+            ticket = null;
+        }
+    }
 
     // If user typed =close in DM
     if (message.content && /^(?:=close|!close)/i.test(message.content.trim())) {

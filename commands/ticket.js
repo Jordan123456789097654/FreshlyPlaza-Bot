@@ -57,7 +57,7 @@ const SUPPORT_TAGS = {
         title: '🎮 Roblox Account Verification',
         emoji: '🎮',
         color: config.colors.neutral,
-        desc: `To link your Roblox account with our Discord server:\n\n• Use the `/verify` command or visit <#${config.channels.verification || '1558519067525124141'}> (#verification).\n• Enter your Roblox username so our bot can sync your in-game store ranks and customer perks.`
+        desc: 'To link your Roblox account with our Discord server:\n\n• Use the `/verify` command or visit <#' + (config.channels.verification || '1558519067525124141') + '> (#verification).\n• Enter your Roblox username so our bot can sync your in-game store ranks and customer perks.'
     },
     tillbug: {
         title: '🛒 Self-Checkout & Register Issue Guide',
@@ -561,7 +561,50 @@ module.exports = [
             return interaction.reply({ content: `✅ Anonymous Chat Mode is now **${statusText}** for this thread.`, flags: MessageFlags.Ephemeral });
         }
     },
-    {
+        {
+        data: new SlashCommandBuilder()
+            .setName('modmail-cleanup')
+            .setDescription('Purge and auto-close all orphaned tickets/threads from old servers or deleted channels')
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        async execute(interaction) {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const member = interaction.member;
+            const isAuthorized = member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+                                 member.roles.cache.has(config.roles.hr) ||
+                                 member.roles.cache.has(config.roles.mr) ||
+                                 (config.ignoredUserIds || []).includes(interaction.user.id);
+
+            if (!isAuthorized) {
+                return interaction.editReply({ content: '❌ Only Grandway Shopping Staff Management can run ModMail cleanup.' });
+            }
+
+            const db = getDb();
+            const tickets = db.getData().tickets || [];
+            let closedCount = 0;
+
+            for (const t of tickets) {
+                if (t.status !== 'CLOSED' && t.status !== 'RESOLVED_BY_AI') {
+                    const exists = interaction.guild.channels.cache.has(t.channel_id);
+                    if (!exists) {
+                        t.status = 'CLOSED';
+                        t.closed_at = new Date().toISOString();
+                        t.closed_by = interaction.user.id;
+                        t.close_reason = 'Auto-closed by /modmail-cleanup: Channel no longer exists in current server';
+                        closedCount++;
+                    }
+                }
+            }
+
+            if (closedCount > 0) {
+                db.save();
+            }
+
+            return interaction.editReply({
+                content: `🧹 **Cleanup Complete:** Successfully closed **${closedCount}** orphaned ticket(s) from previous servers and deleted channels!\nUsers previously blocked can now freely open new ModMail threads.`
+            });
+        }
+    },
+{
         data: new SlashCommandBuilder()
             .setName('modmail-close')
             .setDescription('Close this ModMail thread and dispatch an official transcript to customer DMs')
@@ -655,11 +698,20 @@ module.exports = [
             const categoryKey = interaction.options.getString('category');
             const subject = interaction.options.getString('subject') || 'Direct Slash Command Ticket';
 
-            const activeTicket = await db.getActiveUserTicket(interaction.user.id, categoryKey);
+            let activeTicket = await db.getActiveUserTicket(interaction.user.id, categoryKey, interaction.guild);
             if (activeTicket) {
-                return interaction.editReply({
-                    content: `⚠️ You already have an open ticket in this category: <#${activeTicket.channel_id}>. Please resolve your existing ticket first.`
-                });
+                const channelExists = interaction.guild.channels.cache.has(activeTicket.channel_id);
+                if (!channelExists) {
+                    activeTicket.status = 'CLOSED';
+                    activeTicket.closed_at = new Date().toISOString();
+                    activeTicket.close_reason = 'Auto-closed: Legacy server ticket';
+                    db.save();
+                    activeTicket = null;
+                } else {
+                    return interaction.editReply({
+                        content: `⚠️ You already have an open ticket in this category: <#${activeTicket.channel_id}>. Please resolve your existing ticket first.`
+                    });
+                }
             }
 
             const catConfig = TICKET_CATEGORIES[categoryKey] || TICKET_CATEGORIES.general;

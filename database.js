@@ -613,15 +613,28 @@ const db = {
         return dbData.tickets.find(t => t.id === Number(id)) || null;
     },
 
-    async getActiveUserTicket(userId, type = null) {
+    async getActiveUserTicket(userId, type = null, guild = null) {
         loadDb();
         if (!dbData.tickets) dbData.tickets = [];
-        return dbData.tickets.find(t => 
+        const ticket = dbData.tickets.find(t => 
             t.user_id === userId && 
             t.status !== 'CLOSED' && 
             t.status !== 'RESOLVED_BY_AI' &&
             (!type || t.type === type)
-        ) || null;
+        );
+        if (!ticket) return null;
+
+        if (guild && ticket.channel_id) {
+            const exists = guild.channels.cache.has(ticket.channel_id);
+            if (!exists) {
+                ticket.status = 'CLOSED';
+                ticket.closed_at = new Date().toISOString();
+                ticket.close_reason = 'Auto-closed: Channel does not exist in current server';
+                saveDb();
+                return null;
+            }
+        }
+        return ticket;
     },
 
     async updateTicket(channelOrId, updates) {
