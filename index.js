@@ -19,6 +19,7 @@ const { handleLoaPing } = require('./handlers/loaPingHandler');
 const { handleIncomingModmailDm, handleStaffModmailMessage } = require('./handlers/modmailHandler');
 const { setupAuditLogger } = require('./handlers/auditLogger');
 const WebPortal = require('./utils/webPortal');
+const musicManager = require('./utils/musicManager');
 
 const client = new Client({
     intents: [
@@ -37,6 +38,9 @@ const client = new Client({
         Partials.User
     ]
 });
+
+// Initialize Lavalink early so connector can bind raw gateway packets
+musicManager.init(client);
 
 client.commands = new Collection();
 let overrideStatus = null; // null (normal/UP), 'MAINTENANCE', 'DOWN', 'DEGRADED', 'PARTIAL_OUTAGE'
@@ -171,14 +175,6 @@ client.once('clientReady', async () => {
 
     // Initialize full server audit logger
     setupAuditLogger(client);
-
-    // Initialize Lavalink Music Manager
-    try {
-        const musicManager = require('./utils/musicManager');
-        musicManager.init(client);
-    } catch (mErr) {
-        console.warn('⚠️ [MUSIC] Could not initialize Lavalink musicManager:', mErr.message);
-    }
 
     await initDatabase();
 
