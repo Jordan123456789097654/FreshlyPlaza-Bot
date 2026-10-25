@@ -6,7 +6,7 @@ const config = require('../config');
  */
 function buildNowPlayingEmbed(track, queue) {
     const loopStatus = queue.loopMode === 'track' ? '🔂 Single Track' : (queue.loopMode === 'queue' ? '🔁 Entire Queue' : 'Off');
-    const isPaused = queue.player.state.status === 'paused';
+    const isPaused = queue.player ? (queue.player.paused || (queue.player.state && queue.player.state.status === 'paused')) : false;
     const filterLabel = queue.activeFilter !== 'none' ? `🎛️ ${queue.activeFilter.toUpperCase()}` : 'Default (Clean)';
     const speedLabel = queue.speed !== 1.0 ? `${queue.speed}x` : '1.0x';
 
@@ -38,7 +38,7 @@ function buildNowPlayingEmbed(track, queue) {
  * Builds interactive control buttons for music player
  */
 function buildMusicControlRow(queue) {
-    const isPaused = queue.player.state.status === 'paused';
+    const isPaused = queue.player ? (queue.player.paused || (queue.player.state && queue.player.state.status === 'paused')) : false;
 
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()

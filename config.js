@@ -139,19 +139,19 @@ module.exports = {
         {
             name: 'Serenetia-SSL',
             url: 'lavalinkv4.serenetia.com:443',
-            auth: 'https://dsc.gg/ajidevserver',
+            auth: 'https://seretia.link/discord',
+            secure: true
+        },
+        {
+            name: 'MilloHost-SSL',
+            url: 'lava-v4.millohost.my.id:443',
+            auth: 'https://discord.gg/mjS5J2K3ep',
             secure: true
         },
         {
             name: 'Trinium-NodeLink',
             url: 'nodelink.triniumhost.com:443',
             auth: 'free',
-            secure: true
-        },
-        {
-            name: 'AjieBlogs-SSL',
-            url: 'lava-v4.ajieblogs.eu.org:443',
-            auth: 'https://dsc.gg/ajidevserver',
             secure: true
         }
     ]

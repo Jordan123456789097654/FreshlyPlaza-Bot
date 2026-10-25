@@ -553,6 +553,39 @@ function renderMusicDashboard(queue, voiceChannels = []) {
             }
         }, 1000);
 
+        // Live Auto-Sync: Poll state every 2.5 seconds to synchronize multiple listeners seamlessly
+        let lastTrackTitle = '${trackTitle}';
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/music/state');
+                if (!res.ok) return;
+                const state = await res.json();
+                
+                // Resync local playback position with bot's accurate server clock
+                if (state.elapsedSeconds !== undefined) {
+                    currentElapsed = state.elapsedSeconds;
+                }
+                if (state.trackSeconds !== undefined) {
+                    totalDuration = state.trackSeconds;
+                }
+                isPlaying = state.isPlaying;
+                isPaused = state.isPaused;
+
+                // If track changed by someone else, smoothly reload view and lyrics
+                const newTitle = state.currentTrack ? state.currentTrack.title : 'Nothing Playing';
+                if (newTitle !== lastTrackTitle) {
+                    lastTrackTitle = newTitle;
+                    location.reload();
+                    return;
+                }
+
+                const pct = Math.min(100, (currentElapsed / Math.max(1, totalDuration)) * 100);
+                document.getElementById('progressFill').style.width = pct + '%';
+                document.getElementById('timeElapsed').innerText = formatSecs(currentElapsed);
+                updateLiveLyrics(currentElapsed);
+            } catch (_) {}
+        }, 2500);
+
         function formatSecs(sec) {
             const s = Math.floor(sec) || 0;
             const mins = Math.floor(s / 60);

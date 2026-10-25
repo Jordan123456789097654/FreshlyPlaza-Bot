@@ -1825,6 +1825,31 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify(queue && queue.currentLyrics ? queue.currentLyrics : { syncedLyrics: [], plainLyrics: null }));
     }
 
+    // 7.9. Music Live State API (For seamless live dashboard polling without reloading)
+    if (pathname === '/api/music/state') {
+        const musicManager = require('./utils/musicManager');
+        const guild = client.guilds.cache.get(config.guildId);
+        const queue = guild ? musicManager.getQueue(guild.id) : null;
+
+        const isPlaying = queue && queue.isPlaying && queue.currentTrack;
+        const currentTrack = isPlaying ? queue.currentTrack : null;
+        const isPaused = queue && queue.player ? (queue.player.paused || (queue.player.state && queue.player.state.status === 'paused')) : false;
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+            isPlaying: !!isPlaying,
+            isPaused,
+            currentTrack,
+            elapsedSeconds: queue ? queue.getPlaybackSeconds() : 0,
+            trackSeconds: currentTrack ? (currentTrack.seconds || 1) : 1,
+            volume: queue ? queue.volume : 100,
+            speed: queue ? (queue.speed || 1.0) : 1.0,
+            activeFilter: queue ? (queue.activeFilter || 'none') : 'none',
+            loopMode: queue ? queue.loopMode : 'off',
+            queue: queue ? queue.queue : []
+        }));
+    }
+
     // 8. Main /health and /status Endpoint (Supports automatic detection)
     if (pathname === '/health' || pathname === '/' || pathname === '/status') {
         const metrics = client.healthControl.getMetrics();
