@@ -233,9 +233,31 @@ class GuildMusicQueue {
                 throw new Error('Voice player is not connected.');
             }
 
+            // If track does not have an encoded string yet (e.g. from yt-search playlist fallback), resolve it on the fly
+            let trackEncoded = track.encoded;
+            if (!trackEncoded) {
+                const activeNodes = musicManager.shoukaku ? Array.from(musicManager.shoukaku.nodes.values()).filter(n => n.state === 2 || n.state === 1) : [];
+                for (const node of activeNodes) {
+                    try {
+                        const res = await node.rest.resolve(track.url);
+                        if (res && res.data) {
+                            trackEncoded = Array.isArray(res.data) ? res.data[0]?.encoded : (res.data.encoded || res.data.tracks?.[0]?.encoded);
+                            if (trackEncoded) {
+                                track.encoded = trackEncoded;
+                                break;
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            if (!trackEncoded) {
+                throw new Error('Could not encode track audio stream from Lavalink node');
+            }
+
             // Play track via Lavalink
             await this.player.playTrack({
-                track: { encoded: track.encoded },
+                track: { encoded: trackEncoded },
                 position: seekSeconds * 1000
             });
 
@@ -565,6 +587,38 @@ const musicManager = {
         }
 
         // Fallback: yt-search + Lavalink encode
+        // Check if query is a playlist ID or playlist URL
+        const playlistMatch = cleanQuery.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+        if (playlistMatch) {
+            try {
+                const listId = playlistMatch[1];
+                const pResult = await yts({ listId });
+                if (pResult && pResult.videos && pResult.videos.length > 0) {
+                    const tracks = pResult.videos.map(v => ({
+                        title: v.title || 'Unknown Title',
+                        url: v.url || `https://www.youtube.com/watch?v=${v.videoId}`,
+                        duration: v.duration?.timestamp || this.formatSeconds(v.duration?.seconds || 0),
+                        seconds: v.duration?.seconds || 0,
+                        author: v.author ? v.author.name : (pResult.author ? pResult.author.name : 'Unknown Artist'),
+                        thumbnail: v.thumbnail || null,
+                        encoded: null,
+                        requester: {
+                            id: requester.id,
+                            tag: requester.tag || requester.username,
+                            avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+                        }
+                    }));
+                    return {
+                        type: 'playlist',
+                        title: pResult.title || 'YouTube Playlist',
+                        tracks
+                    };
+                }
+            } catch (pErr) {
+                console.warn('[YTS PLAYLIST FALLBACK WARN]', pErr.message);
+            }
+        }
+
         const searchResult = await yts(cleanQuery);
         if (!searchResult || !searchResult.videos || searchResult.videos.length === 0) {
             return { type: 'empty' };
