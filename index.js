@@ -1935,6 +1935,7 @@ const server = http.createServer(async (req, res) => {
             voiceChannelName: queue ? queue.voiceChannelName : null,
             voiceChannels,
             listeners,
+            lyricsLoading: !!(queue && queue.lyricsLoading),
             hasLyrics: !!(lyr && ((lyr.syncedLyrics && lyr.syncedLyrics.length) || lyr.plainLyrics))
         }));
     }

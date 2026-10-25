@@ -92,7 +92,7 @@ h3 { font-size: 15px; font-weight: 800; }
 .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
 .tab { background: none; border: 1px solid var(--border); color: var(--muted); padding: 8px 14px; border-radius: 10px; font-weight: 700; font-size: 12px; }
 .tab.on { background: rgba(59,130,246,.2); color: #93c5fd; border-color: var(--blue); }
-.lyrics { height: 340px; overflow-y: auto; padding: 8px 4px; scroll-behavior: smooth; }
+.lyrics { position: relative; height: 340px; overflow-y: auto; padding: 8px 4px; scroll-behavior: smooth; }
 .ly { padding: 6px 10px; border-radius: 8px; color: #64748b; font-size: 17px; font-weight: 700; cursor: pointer; transition: .2s; }
 .ly:hover { color: #cbd5e1; }
 .ly.on { color: #fff; background: rgba(46,204,113,.15); font-size: 20px; }
@@ -299,7 +299,13 @@ h3 { font-size: 15px; font-weight: 800; }
         renderQueue(s);
         renderHistory(s);
 
-        if (cur && s.hasLyrics && !lyr.loaded) loadLyrics();
+        if (cur) {
+            if (s.hasLyrics && !lyr.loaded) {
+                loadLyrics();
+            } else if (!s.hasLyrics && !s.lyricsLoading && !lyr.loaded) {
+                $('lyrics').innerHTML = '<div class="empty">No synchronized or plain lyrics found for this song.</div>';
+            }
+        }
     }
 
     /* ---------- voice ---------- */
@@ -371,16 +377,19 @@ h3 { font-size: 15px; font-weight: 800; }
         fetch('/api/music/lyrics', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
             if (forKey !== trackKey) return; // track changed while loading
             var box = $('lyrics');
+            var hdr = (d.trackName || d.artistName)
+                ? '<div class="sub" style="padding:4px 10px 10px;color:#93c5fd;font-weight:700">🎵 Matched: ' + esc(d.trackName || '') + (d.artistName ? ' — ' + esc(d.artistName) : '') + '</div>'
+                : '';
             if (d.syncedLyrics && d.syncedLyrics.length) {
                 lyr.lines = d.syncedLyrics;
-                var h = '';
+                var h = hdr;
                 d.syncedLyrics.forEach(function (l, i) {
                     h += '<div class="ly" data-t="' + l.time + '" id="ly' + i + '">' + (l.text ? esc(l.text) : '♪') + '</div>';
                 });
                 box.innerHTML = h;
             } else if (d.plainLyrics) {
                 lyr.plain = d.plainLyrics;
-                box.innerHTML = '<div class="plain">' + esc(d.plainLyrics) + '</div>';
+                box.innerHTML = hdr + '<div class="plain">' + esc(d.plainLyrics) + '</div>';
             } else {
                 lyr.loaded = false;
             }
@@ -388,17 +397,22 @@ h3 { font-size: 15px; font-weight: 800; }
     }
     function highlightLyric(sec) {
         if (!lyr.lines.length) return;
-        var idx = 0;
-        for (var i = 0; i < lyr.lines.length; i++) { if (sec >= lyr.lines[i].time) idx = i; else break; }
+        var idx = -1;
+        for (var i = 0; i < lyr.lines.length; i++) {
+            if (sec + 0.25 >= lyr.lines[i].time) idx = i;
+            else break;
+        }
         if (idx === lyr.active) return;
         var box = $('lyrics');
         var old = $('ly' + lyr.active);
         if (old) old.className = 'ly';
-        var el = $('ly' + idx);
-        if (el) {
-            el.className = 'ly on';
-            // scroll inside the lyrics box only, so the page itself never jumps
-            box.scrollTop = el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2;
+        if (idx >= 0) {
+            var el = $('ly' + idx);
+            if (el) {
+                el.className = 'ly on';
+                // scroll inside the lyrics box only (box has position:relative)
+                box.scrollTop = Math.max(0, el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2);
+            }
         }
         lyr.active = idx;
     }

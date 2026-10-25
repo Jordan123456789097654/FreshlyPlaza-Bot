@@ -375,6 +375,7 @@ class GuildMusicQueue {
         this._stopping = false;
         this.currentTrack = track;
         this.currentLyrics = null;
+        this.lyricsLoading = true;
         this.isPlaying = true;
         this.pausedAt = 0;
         this._seeking = seekSeconds > 0;
@@ -385,8 +386,13 @@ class GuildMusicQueue {
         lyricsService.fetchLyrics(track).then(res => {
             if (this.currentTrack && this.currentTrack.url === trackUrl) {
                 this.currentLyrics = res;
+                this.lyricsLoading = false;
             }
-        }).catch(() => {});
+        }).catch(() => {
+            if (this.currentTrack && this.currentTrack.url === trackUrl) {
+                this.lyricsLoading = false;
+            }
+        });
 
         try {
             if (!this.player && this.voiceChannel) {

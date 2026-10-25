@@ -2,9 +2,9 @@ const https = require('https');
 
 /**
  * High-Accuracy Lyrics & LRCLIB API Helper
- * - Separates Artist and Track Name cleanly from YouTube titles / channel names
- * - Uses structured LRCLIB queries (track_name + artist_name) before broad search
- * - Scores candidates by title similarity, artist similarity, and duration proximity
+ * - Separates Artist and Track Name cleanly from YouTube/SoundCloud/Deezer titles & channel names
+ * - Queries LRCLIB with strict artist + title validation so wrong songs are never returned
+ * - Falls back to Lyrics.ovh plain lyrics if LRCLIB has no match
  */
 const lyricsService = {
     /**
@@ -14,24 +14,25 @@ const lyricsService = {
         let title = String(rawTitle || '').trim();
         let author = String(rawAuthor || '').trim();
 
-        // Remove common YouTube channel suffixes from author
+        // Remove common YouTube / SoundCloud channel suffixes from author
         author = author
             .replace(/\s*-\s*Topic$/i, '')
             .replace(/VEVO$/i, '')
-            .replace(/\b(?:Official|Music|Records|Recordings|Channel|TV)\b/gi, '')
+            .replace(/\b(?:Official|Music|Records|Recordings|Channel|TV|Audio|Prod\.?)\b/gi, '')
+            .replace(/[_|•]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
 
         // Remove bracketed/parenthesized noise like (Official Video), [Lyrics], (feat. X), [4K Remaster]
         title = title
             .replace(/\(.*?\)|\[.*?\]|\{.*?\}/g, ' ')
-            .replace(/\b(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video|visualizer)|lyric\s*video|lyrics?|visualizer|audio|video|hd|hq|4k|remastered|explicit|clean\s*version|slowed|reverb|sped\s*up|nightcore|bass\s*boosted)\b/gi, ' ')
+            .replace(/\b(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video|visualizer)|lyric\s*video|lyrics?|visualizer|audio|video|hd|hq|4k|remastered|explicit|clean\s*version|slowed|reverb|sped\s*up|nightcore|bass\s*boosted|prod\.?\s+by\s+\S+)\b/gi, ' ')
             .replace(/\b(?:ft\.?|feat\.?|featuring)\s+[^-–—|]+/gi, ' ')
-            .replace(/[|•"]/g, ' ')
+            .replace(/[|•"_]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
 
-        // Many YouTube titles are "Artist - Song Title"
+        // Many YouTube/SoundCloud titles are "Artist - Song Title"
         let extractedArtist = '';
         let extractedTrack = title;
         const dashParts = title.split(/\s+[-–—:]\s+/);
@@ -40,44 +41,69 @@ const lyricsService = {
             extractedTrack = dashParts.slice(1).join(' ').trim();
         }
 
-        // If the extracted artist is already in author or vice versa, prefer the cleaner one
         const primaryArtist = extractedArtist || author;
         const secondaryArtist = extractedArtist && author && extractedArtist.toLowerCase() !== author.toLowerCase() ? author : '';
-
-        // Also strip "ft./feat." from artist
         const cleanPrimaryArtist = primaryArtist.replace(/\b(?:ft\.?|feat\.?|featuring|&|x|,)\s+.*/i, '').trim();
 
         return {
             trackName: extractedTrack || title,
             fullTitle: title,
             artistName: cleanPrimaryArtist || primaryArtist,
-            rawArtist: secondaryArtist || author
+            rawArtist: secondaryArtist || author,
+            hasExplicitDashArtist: Boolean(extractedArtist)
         };
     },
 
     /**
-     * Normalize text into lowercase alphanumeric tokens for similarity comparison
+     * Normalize text into lowercase alphanumeric tokens (preserving 1-char words like "i", "u", "2")
      */
     _tokens(str) {
         return String(str || '')
             .toLowerCase()
+            .replace(/['’`]/g, '')
             .replace(/[^a-z0-9\s]/g, ' ')
             .split(/\s+/)
-            .filter(w => w.length > 1);
+            .filter(w => w.length > 0);
     },
 
     /**
-     * Compute token overlap ratio (0..1) between target and candidate
+     * Compute bidirectional token similarity (Dice coefficient 0..1)
      */
-    _overlap(targetStr, candidateStr) {
-        const tTokens = this._tokens(targetStr);
-        const cTokens = new Set(this._tokens(candidateStr));
-        if (tTokens.length === 0 || cTokens.size === 0) return 0;
-        let hits = 0;
-        for (const t of tTokens) {
-            if (cTokens.has(t)) hits++;
+    _similarity(aStr, bStr) {
+        const a = this._tokens(aStr);
+        const b = this._tokens(bStr);
+        if (a.length === 0 || b.length === 0) return 0;
+
+        const aNorm = a.join(' ');
+        const bNorm = b.join(' ');
+        if (aNorm === bNorm) return 1.0;
+
+        const bSet = new Set(b);
+        let matches = 0;
+        for (const token of a) {
+            if (bSet.has(token)) matches++;
         }
-        return hits / tTokens.length;
+        return (2 * matches) / (a.length + b.length);
+    },
+
+    /**
+     * Check if any artist token matches between our metadata and the LRCLIB candidate
+     */
+    _artistMatches(meta, itemArtist) {
+        const candidateTokens = new Set(this._tokens(itemArtist));
+        if (candidateTokens.size === 0) return false;
+
+        const pool = [
+            ...this._tokens(meta.artistName),
+            ...this._tokens(meta.rawArtist),
+            ...this._tokens(meta.fullTitle)
+        ].filter(t => t.length >= 2);
+
+        if (pool.length === 0) return true;
+        for (const t of pool) {
+            if (candidateTokens.has(t)) return true;
+        }
+        return false;
     },
 
     /**
@@ -103,7 +129,16 @@ const lyricsService = {
 
         const meta = this.cleanMetadata(rawTitle, rawAuthor);
 
-        // Build ordered search URLs from most specific to broadest
+        // 1. Try exact LRCLIB /api/get first when we have both trackName and artistName
+        if (meta.trackName && meta.artistName) {
+            const getUrl = `https://lrclib.net/api/get?track_name=${encodeURIComponent(meta.trackName)}&artist_name=${encodeURIComponent(meta.artistName)}${targetSeconds > 0 ? `&duration=${Math.round(targetSeconds)}` : ''}`;
+            const exact = await this._requestJson(getUrl);
+            if (exact && !exact.code && (exact.syncedLyrics || exact.plainLyrics)) {
+                return this._formatResult(exact);
+            }
+        }
+
+        // 2. Build ordered search URLs from most specific to broadest
         const urls = [];
         if (meta.trackName && meta.artistName) {
             urls.push(`https://lrclib.net/api/search?track_name=${encodeURIComponent(meta.trackName)}&artist_name=${encodeURIComponent(meta.artistName)}`);
@@ -116,7 +151,6 @@ const lyricsService = {
             if (meta.fullTitle !== meta.trackName) {
                 urls.push(`https://lrclib.net/api/search?q=${encodeURIComponent(meta.fullTitle)}`);
             }
-            urls.push(`https://lrclib.net/api/search?track_name=${encodeURIComponent(meta.trackName)}`);
         }
 
         for (const url of urls) {
@@ -125,12 +159,20 @@ const lyricsService = {
 
             const best = this._pickBestCandidate(list, meta, targetSeconds);
             if (best) {
+                return this._formatResult(best);
+            }
+        }
+
+        // 3. Fallback: Lyrics.ovh for plain lyrics when LRCLIB doesn't have the song
+        if (meta.trackName && meta.artistName) {
+            const ovh = await this._fetchLyricsOvh(meta.artistName, meta.trackName);
+            if (ovh) {
                 return {
-                    trackName: best.trackName,
-                    artistName: best.artistName,
-                    plainLyrics: best.plainLyrics || null,
-                    syncedLyrics: best.syncedLyrics ? this.parseLrc(best.syncedLyrics) : null,
-                    rawSynced: best.syncedLyrics || null
+                    trackName: meta.trackName,
+                    artistName: meta.artistName,
+                    plainLyrics: ovh,
+                    syncedLyrics: null,
+                    rawSynced: null
                 };
             }
         }
@@ -138,8 +180,19 @@ const lyricsService = {
         return null;
     },
 
+    _formatResult(item) {
+        const parsedSynced = item.syncedLyrics ? this.parseLrc(item.syncedLyrics) : null;
+        return {
+            trackName: item.trackName,
+            artistName: item.artistName,
+            plainLyrics: item.plainLyrics || null,
+            syncedLyrics: parsedSynced && parsedSynced.length > 0 ? parsedSynced : null,
+            rawSynced: item.syncedLyrics || null
+        };
+    },
+
     /**
-     * Score and filter LRCLIB results so unrelated songs are rejected
+     * Score and filter LRCLIB results so unrelated songs are strictly rejected
      */
     _pickBestCandidate(list, meta, targetSeconds) {
         let bestItem = null;
@@ -149,33 +202,35 @@ const lyricsService = {
             if (!item || (!item.syncedLyrics && !item.plainLyrics)) continue;
 
             const titleSim = Math.max(
-                this._overlap(meta.trackName, item.trackName),
-                this._overlap(item.trackName, meta.trackName),
-                this._overlap(meta.fullTitle, item.trackName)
+                this._similarity(meta.trackName, item.trackName),
+                this._similarity(meta.fullTitle, item.trackName),
+                this._similarity(meta.fullTitle, `${item.artistName} ${item.trackName}`)
             );
 
-            // Reject candidates whose title doesn't match the song title at all
-            if (titleSim < 0.45) continue;
+            // Strictly reject candidates whose title doesn't match
+            if (titleSim < 0.5) continue;
 
             const artistSim = Math.max(
-                this._overlap(meta.artistName, item.artistName),
-                this._overlap(meta.rawArtist, item.artistName),
-                this._overlap(meta.fullTitle, item.artistName)
+                this._similarity(meta.artistName, item.artistName),
+                this._similarity(meta.rawArtist, item.artistName)
             );
+            const hasAnyArtistOverlap = this._artistMatches(meta, item.artistName);
 
-            let score = titleSim * 60 + artistSim * 35;
+            // If we know the artist or duration, don't allow a completely unrelated artist unless duration is virtually identical
+            const durationDiff = (targetSeconds > 0 && item.duration > 0) ? Math.abs(targetSeconds - item.duration) : 999;
+            if (!hasAnyArtistOverlap && durationDiff > 4) continue;
 
-            // Prefer synced lyrics for karaoke highlighting
-            if (item.syncedLyrics) score += 18;
+            // Reject if duration is off by more than 35 seconds
+            if (targetSeconds > 0 && item.duration > 0 && durationDiff > 35) continue;
 
-            // Duration check: penalize wildly different lengths (e.g. 10-minute remix vs 3-minute song)
-            if (targetSeconds > 0 && item.duration > 0) {
-                const diff = Math.abs(targetSeconds - item.duration);
-                if (diff <= 5) score += 20;
-                else if (diff <= 15) score += 10;
-                else if (diff > 45) score -= 25;
-                if (diff > 90) continue; // Reject if duration is off by more than 1.5 minutes
-            }
+            let score = titleSim * 65 + artistSim * 40 + (hasAnyArtistOverlap ? 15 : 0);
+
+            if (item.syncedLyrics) score += 15;
+
+            if (durationDiff <= 3) score += 25;
+            else if (durationDiff <= 8) score += 15;
+            else if (durationDiff <= 15) score += 5;
+            else if (durationDiff < 999) score -= 15;
 
             if (score > bestScore) {
                 bestScore = score;
@@ -183,8 +238,34 @@ const lyricsService = {
             }
         }
 
-        // Require a reasonable minimum confidence score
-        return bestScore >= 35 ? bestItem : null;
+        return bestScore >= 55 ? bestItem : null;
+    },
+
+    _fetchLyricsOvh(artist, title) {
+        const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`;
+        return new Promise((resolve) => {
+            const req = https.get(url, { headers: { 'User-Agent': 'GrandwayMusic/2.5' } }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(data);
+                        if (json && json.lyrics && typeof json.lyrics === 'string' && json.lyrics.trim().length > 20) {
+                            resolve(json.lyrics.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim());
+                        } else {
+                            resolve(null);
+                        }
+                    } catch (_) {
+                        resolve(null);
+                    }
+                });
+            });
+            req.on('error', () => resolve(null));
+            req.setTimeout(3500, () => {
+                req.destroy();
+                resolve(null);
+            });
+        });
     },
 
     _requestJson(url) {
@@ -209,25 +290,29 @@ const lyricsService = {
     },
 
     /**
-     * Parses LRC string [mm:ss.xx] Lyric text into an array of { time: seconds, text: string }
+     * Parses LRC string [mm:ss.xx] Lyric text into a sorted array of { time: seconds, text: string }
      */
     parseLrc(lrcText) {
         if (!lrcText) return [];
-        const lines = lrcText.split('\n');
+        const lines = lrcText.split(/\r?\n/);
         const results = [];
-        const regex = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\](.*)/;
+        const timeTagRegex = /\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
 
-        for (const line of lines) {
-            const match = line.match(regex);
-            if (match) {
+        for (const rawLine of lines) {
+            const matches = [...rawLine.matchAll(timeTagRegex)];
+            if (matches.length === 0) continue;
+
+            const text = rawLine.replace(timeTagRegex, '').trim();
+            for (const match of matches) {
                 const mins = parseInt(match[1], 10);
                 const secs = parseInt(match[2], 10);
                 const ms = match[3] ? parseInt(match[3].padEnd(3, '0').slice(0, 3), 10) : 0;
                 const totalSeconds = mins * 60 + secs + (ms / 1000);
-                const text = (match[4] || '').trim();
                 results.push({ time: totalSeconds, text });
             }
         }
+
+        results.sort((a, b) => a.time - b.time);
         return results;
     }
 };
