@@ -40,19 +40,19 @@ async function handleInteraction(interaction) {
 
         const action = interaction.customId.replace('btn_music_', '');
         if (action === 'toggle_pause') {
-            const isPaused = queue.player.state.status === 'paused';
+            const isPaused = queue.isPausedState ? queue.isPausedState() : !!(queue.player && queue.player.paused);
             if (isPaused) {
-                queue.resume();
+                await queue.resume();
                 await interaction.update({ components: [buildMusicControlRow(queue)] });
             } else {
-                queue.pause();
+                await queue.pause();
                 await interaction.update({ components: [buildMusicControlRow(queue)] });
             }
             return;
         }
 
         if (action === 'skip') {
-            const skipped = queue.skip();
+            const skipped = await queue.skip();
             if (skipped) {
                 return interaction.reply({ content: `⏭️ Skipped by <@${interaction.user.id}>: **${skipped.title}**` });
             } else {
@@ -61,7 +61,7 @@ async function handleInteraction(interaction) {
         }
 
         if (action === 'stop') {
-            queue.stop();
+            await queue.stop();
             return interaction.reply({ content: `⏹️ Playback stopped and queue cleared by <@${interaction.user.id}>.` });
         }
 
@@ -130,32 +130,40 @@ async function handleInteraction(interaction) {
 
         const track = session.tracks[trackIndex];
         const queue = musicManager.getQueue(interaction.guildId);
-        queue.connect(session.voiceChannel, session.textChannel);
 
         await interaction.deferUpdate();
 
-        if (queue.isPlaying || queue.currentTrack) {
-            queue.queue.push(track);
-            const embed = new EmbedBuilder()
-                .setTitle('🎵 Track Added to Queue')
-                .setDescription(`[**${track.title}**](${track.url})`)
-                .addFields(
-                    { name: '🎤 Artist / Channel', value: track.author || 'Unknown', inline: true },
-                    { name: '⏱️ Duration', value: track.duration, inline: true },
-                    { name: '📍 Position in Queue', value: `#${queue.queue.length}`, inline: true }
-                )
-                .setColor(config.colors.secondary)
-                .setThumbnail(track.thumbnail)
-                .setFooter({ text: `Requested by ${interaction.user.username}` })
-                .setTimestamp();
+        try {
+            await queue.connect(session.voiceChannel, session.textChannel);
 
-            await interaction.editReply({ content: '✅ Track selected!', embeds: [embed], components: [] });
-        } else {
+            if (queue.isPlaying || queue.currentTrack) {
+                queue.queue.push(track);
+                const embed = new EmbedBuilder()
+                    .setTitle('🎵 Track Added to Queue')
+                    .setDescription(`[**${track.title}**](${track.url})`)
+                    .addFields(
+                        { name: '🎤 Artist / Channel', value: track.author || 'Unknown', inline: true },
+                        { name: '⏱️ Duration', value: track.duration, inline: true },
+                        { name: '📍 Position in Queue', value: `#${queue.queue.length}`, inline: true }
+                    )
+                    .setColor(config.colors.secondary)
+                    .setThumbnail(track.thumbnail)
+                    .setFooter({ text: `Requested by ${interaction.user.username}` })
+                    .setTimestamp();
+
+                await interaction.editReply({ content: '✅ Track selected!', embeds: [embed], components: [] });
+            } else {
+                await interaction.editReply({
+                    content: `🎶 Selected **${track.title}**! Starting playback...`,
+                    components: []
+                });
+                await queue.playTrack(track);
+            }
+        } catch (err) {
             await interaction.editReply({
-                content: `🎶 Selected **${track.title}**! Starting playback...`,
+                content: `❌ Could not play selected track: ${err.message}`,
                 components: []
             });
-            queue.playTrack(track);
         }
 
         music.searchSessions.delete(sessionId);

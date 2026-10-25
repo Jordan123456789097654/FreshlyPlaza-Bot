@@ -263,7 +263,14 @@ h3 { font-size: 15px; font-weight: 800; }
             $('title').textContent = cur ? cur.title : 'Nothing playing';
             $('artist').textContent = cur ? (cur.author || 'Unknown') : 'Search a song or paste a link to start';
             $('req').textContent = cur && cur.requester ? 'Requested by ' + cur.requester : '';
-            $('art').src = cur && cur.thumbnail ? cur.thumbnail : '';
+            var artEl = $('art');
+            if (cur && cur.thumbnail) {
+                artEl.src = cur.thumbnail;
+                artEl.style.visibility = 'visible';
+            } else {
+                artEl.removeAttribute('src');
+                artEl.style.visibility = 'hidden';
+            }
             $('tTotal').textContent = cur ? (cur.duration || fmt(cur.seconds)) : '0:00';
             resetLyrics();
         }
@@ -390,7 +397,7 @@ h3 { font-size: 15px; font-weight: 800; }
     function currentElapsed() {
         if (!S || !S.current) return 0;
         var e = base.elapsed;
-        if (!S.isPaused) e += (Date.now() - base.at) / 1000;
+        if (!S.isPaused) e += ((Date.now() - base.at) / 1000) * (S.speed || 1);
         var max = S.current.seconds || 0;
         return max ? Math.min(e, max) : e;
     }
@@ -499,10 +506,15 @@ h3 { font-size: 15px; font-weight: 800; }
     }
 
     /* ---------- queue interactions (event delegation) ---------- */
+    var busyAdd = false;
     function addToQueue(query) {
-        if (!query) return;
-        toast('Adding…');
+        if (!query || busyAdd) return;
+        busyAdd = true;
+        $('qAdd').disabled = true;
+        toast('⏳ Loading track…');
         post('/api/music/queue', { query: query }).then(function (r) {
+            busyAdd = false;
+            $('qAdd').disabled = false;
             toast(r && r.error ? ('❌ ' + r.error) : '✅ Added to queue');
             refresh();
         });

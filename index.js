@@ -1600,33 +1600,29 @@ const server = http.createServer(async (req, res) => {
                 const { action, seconds } = JSON.parse(body);
                 const musicManager = require('./utils/musicManager');
                 const guild = client.guilds.cache.get(config.guildId);
-                if (!guild) return res.end(JSON.stringify({ error: 'Guild not ready' }));
+                if (!guild) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Guild not ready' }));
+                }
                 const queue = musicManager.getQueue(guild.id);
 
                 if (action === 'toggle_pause') {
-                    if (queue.player && (queue.player.paused || (queue.player.state && queue.player.state.status === 'paused'))) {
-                        queue.resume();
+                    const isPaused = queue.isPausedState ? queue.isPausedState() : !!(queue.player && queue.player.paused);
+                    if (isPaused) {
+                        await queue.resume();
                     } else {
-                        queue.pause();
+                        await queue.pause();
                     }
                 } else if (action === 'skip') {
-                    queue.skip();
+                    await queue.skip();
                 } else if (action === 'stop') {
-                    queue.stop();
+                    await queue.stop();
                 } else if (action === 'shuffle') {
                     queue.shuffle();
                 } else if (action === 'clear') {
                     queue.queue = [];
                 } else if (action === 'seek' && seconds !== undefined) {
-                    if (queue.player && queue.currentTrack) {
-                        const targetMs = Math.max(0, Math.floor(seconds * 1000));
-                        if (typeof queue.player.seekTo === 'function') {
-                            await queue.player.seekTo(targetMs);
-                        } else if (queue.player.playTrack) {
-                            await queue.player.playTrack({ track: { encoded: queue.currentTrack.encoded }, position: targetMs });
-                        }
-                        queue.playbackStartTime = Date.now() - (seconds * 1000);
-                    }
+                    await queue.seek(seconds);
                 }
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1740,18 +1736,34 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
             try {
                 const { query } = JSON.parse(body);
+                if (!query || !query.trim()) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Please enter a song name or link' }));
+                }
                 const musicManager = require('./utils/musicManager');
                 const guild = client.guilds.cache.get(config.guildId);
-                if (!guild) return res.end(JSON.stringify({ error: 'Guild unavailable' }));
+                if (!guild) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Guild unavailable' }));
+                }
                 const queue = musicManager.getQueue(guild.id);
 
-                // Auto find default voice channel if disconnected
-                if (!queue.connection) {
-                    const defaultVc = guild.channels.cache.find(c => c.isVoiceBased() && c.name.includes('Music')) || guild.channels.cache.find(c => c.isVoiceBased());
-                    const defaultText = guild.channels.cache.find(c => c.name === 'music-commands') || guild.channels.cache.find(c => c.isTextBased());
-                    if (defaultVc && defaultText) {
-                        await queue.connect(defaultVc, defaultText);
+                // Auto find voice channel if disconnected (prefer channel with active members first, then configured music lounge)
+                if (!queue.player) {
+                    const activeUserVc = guild.channels.cache.find(c => c.isVoiceBased() && c.members.filter(m => !m.user.bot).size > 0);
+                    const configMusicVc = config.channels.musicLoungeVoice ? guild.channels.cache.get(config.channels.musicLoungeVoice) : null;
+                    const defaultVc = activeUserVc
+                        || configMusicVc
+                        || guild.channels.cache.find(c => c.isVoiceBased() && c.name.toLowerCase().includes('music'))
+                        || guild.channels.cache.find(c => c.isVoiceBased());
+                    const defaultText = (config.channels.musicCommands && guild.channels.cache.get(config.channels.musicCommands))
+                        || guild.channels.cache.find(c => c.name === 'music-commands')
+                        || guild.channels.cache.find(c => c.isTextBased());
+                    if (!defaultVc) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        return res.end(JSON.stringify({ error: 'No voice channel found in server' }));
                     }
+                    await queue.connect(defaultVc, defaultText);
                 }
 
                 const resolved = await musicManager.resolveQuery(query, client.user);
@@ -1762,15 +1774,15 @@ const server = http.createServer(async (req, res) => {
 
                 if (resolved.type === 'playlist') {
                     resolved.tracks.forEach(t => queue.queue.push(t));
-                    if (!queue.isPlaying && !queue.currentTrack) {
-                        queue.playTrack(queue.queue.shift());
+                    if (!queue.isPlaying && !queue.currentTrack && queue.queue.length > 0) {
+                        await queue.playTrack(queue.queue.shift());
                     }
                 } else {
                     const track = resolved.type === 'track' ? resolved.track : resolved.topTrack;
                     if (queue.isPlaying || queue.currentTrack) {
                         queue.queue.push(track);
                     } else {
-                        queue.playTrack(track);
+                        await queue.playTrack(track);
                     }
                 }
 
@@ -1847,7 +1859,10 @@ const server = http.createServer(async (req, res) => {
                     const queue = musicManager.getQueue(guild.id);
                     const targetChannel = await client.channels.fetch(channelId).catch(() => null);
                     if (targetChannel && targetChannel.isVoiceBased()) {
-                        await queue.connect(targetChannel, queue.textChannel || targetChannel);
+                        const defaultText = queue.textChannel
+                            || (config.channels.musicCommands && guild.channels.cache.get(config.channels.musicCommands))
+                            || guild.channels.cache.find(c => c.name === 'music-commands');
+                        await queue.connect(targetChannel, defaultText);
                     }
                 }
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1881,7 +1896,7 @@ const server = http.createServer(async (req, res) => {
         } : null;
 
         const isPlaying = !!(queue && queue.isPlaying && queue.currentTrack);
-        const isPaused = !!(queue && queue.player && (queue.player.paused || (queue.player.state && queue.player.state.status === 'paused')));
+        const isPaused = !!(queue && (queue.isPausedState ? queue.isPausedState() : (queue.player && queue.player.paused)));
         const lyr = queue ? queue.currentLyrics : null;
 
         const voiceChannels = guild ? guild.channels.cache

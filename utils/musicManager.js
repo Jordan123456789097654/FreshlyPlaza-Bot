@@ -109,40 +109,67 @@ class GuildMusicQueue {
     setupPlayerListeners() {
         if (!this.player) return;
 
+        // Clean up any existing listeners on this player instance to prevent duplicate triggers
+        this.player.removeAllListeners('start');
+        this.player.removeAllListeners('end');
+        this.player.removeAllListeners('exception');
+        this.player.removeAllListeners('stuck');
+        this.player.removeAllListeners('closed');
+
         this.player.on('start', () => {
             this.isPlaying = true;
-            this.playbackStartTime = Date.now();
+            this.pausedAt = 0;
+            if (!this._seeking) {
+                this.playbackStartTime = Date.now();
+            }
+            this._seeking = false;
+            this.skipVotes.clear();
             musicManager.updateDiscordPresence(this.currentTrack ? this.currentTrack.title : null);
 
-            if (this.textChannel && this.currentTrack) {
+            if (this.textChannel && this.currentTrack && !this._suppressNextStartEmbed) {
                 const { buildNowPlayingEmbed, buildMusicControlRow } = require('./musicUtils');
                 const embed = buildNowPlayingEmbed(this.currentTrack, this);
                 const row = buildMusicControlRow(this);
                 this.textChannel.send({ embeds: [embed], components: [row] }).catch(() => {});
             }
+            this._suppressNextStartEmbed = false;
         });
 
-        this.player.on('end', async (reason) => {
-            // reason can be 'finished', 'replaced', 'stopped', etc.
-            if (reason && reason.type === 'replaced') return;
+        this.player.on('end', async (data) => {
+            // Shoukaku v4 TrackEndEvent: data.reason can be 'finished', 'loadFailed', 'stopped', 'replaced', 'cleanup'
+            const reason = data && typeof data === 'object' ? (data.reason || data.type) : data;
+            if (reason === 'replaced' || reason === 'cleanup') return;
 
-            if (this.currentTrack) {
+            // If stop() was explicitly called, currentTrack is already cleared; do not advance queue
+            if (this._stopping) {
+                this._stopping = false;
+                return;
+            }
+
+            const finishedTrack = this.currentTrack;
+            this.skipVotes.clear();
+
+            if (finishedTrack) {
                 this.history.unshift({
-                    ...this.currentTrack,
+                    ...finishedTrack,
                     playedAt: new Date().toISOString()
                 });
                 if (this.history.length > 50) this.history.pop();
 
-                if (this.loopMode === 'track') {
-                    await this.playTrack(this.currentTrack);
-                    return;
-                } else if (this.loopMode === 'queue') {
-                    this.queue.push(this.currentTrack);
+                if (reason !== 'stopped' && reason !== 'loadFailed') {
+                    if (this.loopMode === 'track') {
+                        this._suppressNextStartEmbed = true;
+                        await this.playTrack(finishedTrack);
+                        return;
+                    } else if (this.loopMode === 'queue') {
+                        this.queue.push(finishedTrack);
+                    }
                 }
             }
 
             this.currentTrack = null;
             this.currentLyrics = null;
+            this.pausedAt = 0;
 
             if (this.queue.length > 0) {
                 const nextTrack = this.queue.shift();
@@ -154,24 +181,23 @@ class GuildMusicQueue {
             }
         });
 
-        this.player.on('error', (err) => {
-            console.error(`[LAVALINK PLAYER ERROR Guild ${this.guildId}]`, err);
-            if (this.textChannel) {
-                this.textChannel.send(`⚠️ **Playback Issue:** Track encountered an issue. Skipping...`).catch(() => {});
+        const handleTrackFault = (label, data) => {
+            console.warn(`[LAVALINK ${label} Guild ${this.guildId}]`, data && (data.exception?.message || data.message || JSON.stringify(data)));
+            // Note: Lavalink also emits 'end' with reason 'loadFailed' right after 'exception',
+            // so we only force-advance if 'stuck' occurred (where 'end' hasn't fired yet).
+            if (label === 'STUCK' && this.player) {
+                this.player.stopTrack().catch(() => {});
             }
-            if (this.queue.length > 0) {
-                const nextTrack = this.queue.shift();
-                this.playTrack(nextTrack);
-            } else {
-                this.isPlaying = false;
-                this.currentTrack = null;
-                musicManager.updateDiscordPresence();
-                this.scheduleDisconnect();
-            }
-        });
+        };
 
-        this.player.on('closed', () => {
+        this.player.on('exception', (data) => handleTrackFault('EXCEPTION', data));
+        this.player.on('stuck', (data) => handleTrackFault('STUCK', data));
+
+        this.player.on('closed', (data) => {
+            console.warn(`[LAVALINK VOICE CLOSED Guild ${this.guildId}]`, data && data.code ? `Code ${data.code}: ${data.reason || ''}` : '');
             this.isPlaying = false;
+            this.pausedAt = 0;
+            this.player = null;
         });
     }
 
@@ -196,13 +222,36 @@ class GuildMusicQueue {
 
     async connect(voiceChannel, textChannel) {
         this.cancelDisconnect();
-        this.textChannel = textChannel;
+        if (textChannel && textChannel.isTextBased && textChannel.isTextBased()) {
+            this.textChannel = textChannel;
+        }
+        const switchingChannel = this.voiceChannelId && this.voiceChannelId !== voiceChannel.id;
         this.voiceChannelId = voiceChannel.id;
         this.voiceChannelName = voiceChannel.name;
         this.voiceChannel = voiceChannel;
 
         if (!musicManager.shoukaku) {
             throw new Error('Lavalink audio client is not initialized or still connecting.');
+        }
+
+        // Verify the bot is actually still in a voice channel if this.player exists
+        const botMember = voiceChannel.guild && voiceChannel.guild.members ? voiceChannel.guild.members.me : null;
+        const botCurrentChannelId = botMember && botMember.voice ? botMember.voice.channelId : null;
+
+        if (this.player && (!this.player.node || this.player.node.state !== 1 || !botCurrentChannelId)) {
+            try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
+            this.player = null;
+        }
+
+        // If user requested moving the bot to a different voice channel while already connected
+        if (this.player && switchingChannel && botMember && botMember.voice) {
+            try {
+                await botMember.voice.setChannel(voiceChannel.id);
+                return this.player;
+            } catch (_) {
+                try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (__) {}
+                this.player = null;
+            }
         }
 
         if (!this.player) {
@@ -215,6 +264,7 @@ class GuildMusicQueue {
             let lastErr = null;
             for (const node of nodes) {
                 try {
+                    try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
                     this.player = await musicManager.shoukaku.joinVoiceChannel({
                         guildId: this.guildId,
                         channelId: voiceChannel.id,
@@ -243,17 +293,28 @@ class GuildMusicQueue {
     }
 
     async playTrack(track, seekSeconds = 0, _retried = false) {
+        if (!track) return;
         this.cancelDisconnect();
+        this._stopping = false;
         this.currentTrack = track;
+        this.currentLyrics = null;
         this.isPlaying = true;
+        this.pausedAt = 0;
+        this._seeking = seekSeconds > 0;
         this.playbackStartTime = Date.now() - (seekSeconds * 1000);
 
-        // Fetch synced lyrics in background
-        lyricsService.fetchLyrics(`${track.title} ${track.author}`).then(res => {
-            this.currentLyrics = res;
+        // Fetch synced lyrics in background (guarded so stale responses don't overwrite newer tracks)
+        const trackUrl = track.url;
+        lyricsService.fetchLyrics(`${track.title} ${track.author || ''}`).then(res => {
+            if (this.currentTrack && this.currentTrack.url === trackUrl) {
+                this.currentLyrics = res;
+            }
         }).catch(() => {});
 
         try {
+            if (!this.player && this.voiceChannel) {
+                await this.connect(this.voiceChannel, this.textChannel);
+            }
             if (!this.player) {
                 throw new Error('Voice player is not connected.');
             }
@@ -365,25 +426,35 @@ class GuildMusicQueue {
     }
 
     getPlaybackSeconds() {
-        if (!this.isPlaying || !this.playbackStartTime) return 0;
-        if (this.player && this.player.position) {
+        if (!this.isPlaying || !this.currentTrack) return 0;
+        if (this.pausedAt && this.playbackStartTime) {
+            return Math.max(0, Math.floor((this.pausedAt - this.playbackStartTime) / 1000));
+        }
+        if (this.player && typeof this.player.position === 'number' && this.player.position > 0) {
             return Math.floor(this.player.position / 1000);
         }
-        if (this.pausedAt) {
-            return Math.floor((this.pausedAt - this.playbackStartTime) / 1000);
+        if (this.playbackStartTime) {
+            return Math.max(0, Math.floor((Date.now() - this.playbackStartTime) / 1000));
         }
-        return Math.floor((Date.now() - this.playbackStartTime) / 1000);
+        return 0;
     }
 
     async setVolume(val) {
-        this.volume = Math.max(1, Math.min(200, val));
+        this.volume = Math.max(1, Math.min(200, Number(val) || 100));
         if (this.player) {
             await this.player.setGlobalVolume(this.volume).catch(() => {});
         }
         return this.volume;
     }
 
+    isPausedState() {
+        if (this.pausedAt > 0) return true;
+        if (this.player && this.player.paused) return true;
+        return false;
+    }
+
     async pause() {
+        if (this.isPausedState()) return false;
         this.pausedAt = Date.now();
         if (this.player) {
             await this.player.setPaused(true).catch(() => {});
@@ -392,11 +463,34 @@ class GuildMusicQueue {
     }
 
     async resume() {
+        if (!this.isPausedState()) return false;
         if (this.pausedAt && this.playbackStartTime) {
             this.playbackStartTime += (Date.now() - this.pausedAt);
         }
+        this.pausedAt = 0;
         if (this.player) {
             await this.player.setPaused(false).catch(() => {});
+        }
+        return true;
+    }
+
+    async seek(seconds) {
+        if (!this.player || !this.currentTrack) return false;
+        const maxSec = this.currentTrack.seconds || 0;
+        const clampedSec = maxSec > 0 ? Math.max(0, Math.min(maxSec, Math.floor(seconds))) : Math.max(0, Math.floor(seconds));
+        const targetMs = clampedSec * 1000;
+
+        this._seeking = true;
+        this.playbackStartTime = Date.now() - targetMs;
+        if (this.pausedAt) {
+            this.pausedAt = Date.now();
+        }
+
+        if (typeof this.player.seekTo === 'function') {
+            await this.player.seekTo(targetMs).catch(() => {});
+        } else if (this.player.playTrack && this.currentTrack.encoded) {
+            this._suppressNextStartEmbed = true;
+            await this.player.playTrack({ track: { encoded: this.currentTrack.encoded }, position: targetMs }).catch(() => {});
         }
         return true;
     }
@@ -404,17 +498,27 @@ class GuildMusicQueue {
     async skip() {
         if (!this.currentTrack) return null;
         const skipped = this.currentTrack;
+        this.skipVotes.clear();
         if (this.player) {
             await this.player.stopTrack().catch(() => {});
+        } else if (this.queue.length > 0) {
+            const nextTrack = this.queue.shift();
+            await this.playTrack(nextTrack);
+        } else {
+            this.currentTrack = null;
+            this.isPlaying = false;
         }
         return skipped;
     }
 
     async stop() {
+        this._stopping = true;
         this.queue = [];
+        this.skipVotes.clear();
         this.currentTrack = null;
         this.currentLyrics = null;
         this.isPlaying = false;
+        this.pausedAt = 0;
         if (this.player) {
             await this.player.stopTrack().catch(() => {});
         }

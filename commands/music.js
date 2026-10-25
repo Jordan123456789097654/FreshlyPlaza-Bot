@@ -94,6 +94,11 @@ module.exports = [
                 if (result.type === 'playlist') {
                     // Check max duration per track
                     const validTracks = result.tracks.filter(t => !musicSettings.maxTrackSeconds || t.seconds <= musicSettings.maxTrackSeconds);
+                    if (validTracks.length === 0) {
+                        return interaction.editReply({
+                            content: `⚠️ None of the tracks in playlist **${result.title}** met the server duration limit.`
+                        });
+                    }
                     validTracks.forEach(t => queue.queue.push(t));
 
                     const embed = new EmbedBuilder()
@@ -110,7 +115,7 @@ module.exports = [
 
                     if (!queue.isPlaying && !queue.currentTrack) {
                         const firstTrack = queue.queue.shift();
-                        queue.playTrack(firstTrack);
+                        await queue.playTrack(firstTrack);
                     }
                     return;
                 }
@@ -164,7 +169,7 @@ module.exports = [
                     await interaction.editReply({
                         content: `🎶 Starting playback for **${track.title}**...`
                     });
-                    queue.playTrack(track);
+                    await queue.playTrack(track);
                 }
             } catch (err) {
                 console.error('[PLAY COMMAND ERROR]', err);
@@ -189,7 +194,7 @@ module.exports = [
                 return interaction.reply({ content: '⚠️ Nothing is currently playing!', flags: MessageFlags.Ephemeral });
             }
 
-            const success = queue.pause();
+            const success = await queue.pause();
             return interaction.reply({
                 content: success ? '⏸️ Music playback has been **paused**.' : '⚠️ Playback is already paused!'
             });
@@ -210,7 +215,7 @@ module.exports = [
                 return interaction.reply({ content: '⚠️ Nothing is currently playing!', flags: MessageFlags.Ephemeral });
             }
 
-            const success = queue.resume();
+            const success = await queue.resume();
             return interaction.reply({
                 content: success ? '▶️ Music playback has been **resumed**.' : '⚠️ Playback is not paused!'
             });
@@ -231,25 +236,25 @@ module.exports = [
             const isAuthorized = await isDjAuthorized(interaction.member, interaction.guild.id);
 
             // Direct skip if DJ, requester, or alone in channel
-            if (isAuthorized || queue.currentTrack.requester.id === interaction.user.id || listeners <= 2) {
-                const skipped = queue.skip();
+            if (isAuthorized || (queue.currentTrack.requester && queue.currentTrack.requester.id === interaction.user.id) || listeners <= 2) {
+                const skipped = await queue.skip();
                 return interaction.reply({
-                    content: `⏭️ Skipped by <@${interaction.user.id}>: **${skipped.title}**`
+                    content: `⏭️ Skipped by <@${interaction.user.id}>: **${skipped ? skipped.title : 'current track'}**`
                 });
             }
 
             // Vote to Skip Mechanism
             queue.skipVotes.add(interaction.user.id);
             const votesNeeded = Math.ceil(listeners / 2);
-            if (queue.skipVotes.size >= votesNeeded) {
-                const skipped = queue.skip();
-                queue.skipVotes.clear();
+            const currentVotes = queue.skipVotes.size;
+            if (currentVotes >= votesNeeded) {
+                const skipped = await queue.skip();
                 return interaction.reply({
-                    content: `🗳️ **Vote Passed (${queue.skipVotes.size}/${votesNeeded})!** Skipped: **${skipped.title}**`
+                    content: `🗳️ **Vote Passed (${currentVotes}/${votesNeeded})!** Skipped: **${skipped ? skipped.title : 'current track'}**`
                 });
             } else {
                 return interaction.reply({
-                    content: `🗳️ <@${interaction.user.id}> voted to skip (**${queue.skipVotes.size}/${votesNeeded}** votes needed from active listeners in voice)!`
+                    content: `🗳️ <@${interaction.user.id}> voted to skip (**${currentVotes}/${votesNeeded}** votes needed from active listeners in voice)!`
                 });
             }
         }
@@ -269,7 +274,7 @@ module.exports = [
                 return interaction.reply({ content: '⚠️ Nothing is playing and the queue is already empty.', flags: MessageFlags.Ephemeral });
             }
 
-            queue.stop();
+            await queue.stop();
             return interaction.reply({
                 content: '⏹️ Stopped playback and cleared the queue.'
             });
