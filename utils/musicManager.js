@@ -479,10 +479,10 @@ const musicManager = {
     async resolveQuery(rawQuery, requester) {
         let cleanQuery = rawQuery.trim();
 
-        // Node check
-        const node = this.shoukaku ? (this.shoukaku.getNode ? this.shoukaku.getNode() : this.shoukaku.options.nodeResolver(this.shoukaku.nodes)) : null;
+        // Node check - iterate connected nodes
+        const activeNodes = this.shoukaku ? Array.from(this.shoukaku.nodes.values()).filter(n => n.state === 2 || n.state === 1) : [];
 
-        if (node) {
+        for (const node of activeNodes) {
             try {
                 let identifier = cleanQuery;
                 if (!cleanQuery.startsWith('http://') && !cleanQuery.startsWith('https://')) {
@@ -490,8 +490,8 @@ const musicManager = {
                 }
 
                 const res = await node.rest.resolve(identifier);
-                if (res) {
-                    if (res.loadType === 'track' && res.data) {
+                if (res && res.data) {
+                    if (res.loadType === 'track') {
                         const t = res.data;
                         const info = t.info || {};
                         const track = {
@@ -509,7 +509,7 @@ const musicManager = {
                             }
                         };
                         return { type: 'track', track };
-                    } else if (res.loadType === 'playlist' && res.data) {
+                    } else if (res.loadType === 'playlist') {
                         const playlistData = res.data;
                         const tracks = (playlistData.tracks || []).map(t => {
                             const info = t.info || {};
@@ -533,7 +533,7 @@ const musicManager = {
                             title: (playlistData.info && playlistData.info.name) || 'Playlist',
                             tracks
                         };
-                    } else if (res.loadType === 'search' && res.data && res.data.length > 0) {
+                    } else if (res.loadType === 'search' && Array.isArray(res.data) && res.data.length > 0) {
                         const topTracks = res.data.slice(0, 5).map(t => {
                             const info = t.info || {};
                             return {
@@ -559,7 +559,8 @@ const musicManager = {
                     }
                 }
             } catch (lavalinkErr) {
-                console.warn('[LAVALINK RESOLVE WARN]', lavalinkErr.message);
+                // Try next node if this one fails
+                continue;
             }
         }
 
