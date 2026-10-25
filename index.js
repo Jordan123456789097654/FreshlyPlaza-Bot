@@ -1565,28 +1565,11 @@ const server = http.createServer(async (req, res) => {
         `);
     }
 
-    // 7.6. Music Command Center Web Dashboard
+    // 7.6. Music Command Center Web Dashboard (static live shell; data comes from /api/music/state)
     if (pathname === '/music') {
-        const musicManager = require('./utils/musicManager');
         const { renderMusicDashboard } = require('./utils/musicDashboard');
-        const guild = client.guilds.cache.get(config.guildId);
-        const queue = guild ? musicManager.getQueue(guild.id) : null;
-
-        const voiceChannels = guild ? guild.channels.cache
-            .filter(c => c.isVoiceBased())
-            .map(c => ({
-                id: c.id,
-                name: c.name,
-                membersCount: c.members.size,
-                members: c.members.filter(m => !m.user.bot).map(m => ({
-                    id: m.id,
-                    username: m.displayName || m.user.username,
-                    avatar: m.user.displayAvatarURL({ size: 64 })
-                }))
-            })) : [];
-
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        return res.end(renderMusicDashboard(queue, voiceChannels));
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        return res.end(renderMusicDashboard());
     }
 
     // 7.7. Music Dynamic Banner SVG
@@ -1717,7 +1700,7 @@ const server = http.createServer(async (req, res) => {
                 const guild = client.guilds.cache.get(config.guildId);
                 if (guild) {
                     const queue = musicManager.getQueue(guild.id);
-                    await queue.applyFilter(filter, speed);
+                    await queue.applyFilter(filter, speed === undefined ? null : speed);
                 }
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ success: true }));
@@ -1806,12 +1789,15 @@ const server = http.createServer(async (req, res) => {
         req.on('data', chunk => body += chunk);
         req.on('end', () => {
             try {
-                const { index } = JSON.parse(body);
+                const { index, url } = JSON.parse(body);
                 const musicManager = require('./utils/musicManager');
                 const guild = client.guilds.cache.get(config.guildId);
                 if (guild) {
                     const queue = musicManager.getQueue(guild.id);
-                    queue.remove(index);
+                    // Guard against stale clients: only remove if the track at that index is the one the user clicked
+                    if (!url || (queue.queue[index] && queue.queue[index].url === url)) {
+                        queue.remove(index);
+                    }
                 }
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ success: true }));
@@ -1828,12 +1814,13 @@ const server = http.createServer(async (req, res) => {
         req.on('data', chunk => body += chunk);
         req.on('end', () => {
             try {
-                const { from, to } = JSON.parse(body);
+                const { from, to, url } = JSON.parse(body);
                 const musicManager = require('./utils/musicManager');
                 const guild = client.guilds.cache.get(config.guildId);
                 if (guild) {
                     const queue = musicManager.getQueue(guild.id);
-                    if (from >= 0 && from < queue.queue.length && to >= 0 && to < queue.queue.length) {
+                    const fresh = !url || (queue.queue[from] && queue.queue[from].url === url);
+                    if (fresh && from >= 0 && from < queue.queue.length && to >= 0 && to < queue.queue.length) {
                         const [moved] = queue.queue.splice(from, 1);
                         queue.queue.splice(to, 0, moved);
                     }
@@ -1881,28 +1868,52 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify(queue && queue.currentLyrics ? queue.currentLyrics : { syncedLyrics: [], plainLyrics: null }));
     }
 
-    // 7.9. Music Live State API (For seamless live dashboard polling without reloading)
+    // 7.9. Music Live State API (single source of truth for the live dashboard; polled, never reloaded)
     if (pathname === '/api/music/state') {
         const musicManager = require('./utils/musicManager');
         const guild = client.guilds.cache.get(config.guildId);
         const queue = guild ? musicManager.getQueue(guild.id) : null;
 
-        const isPlaying = queue && queue.isPlaying && queue.currentTrack;
-        const currentTrack = isPlaying ? queue.currentTrack : null;
-        const isPaused = queue && queue.player ? (queue.player.paused || (queue.player.state && queue.player.state.status === 'paused')) : false;
+        const slim = (t) => t ? {
+            title: t.title, author: t.author, url: t.url, thumbnail: t.thumbnail || null,
+            duration: t.duration, seconds: t.seconds || 0,
+            requester: t.requester ? t.requester.tag : null
+        } : null;
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        const isPlaying = !!(queue && queue.isPlaying && queue.currentTrack);
+        const isPaused = !!(queue && queue.player && (queue.player.paused || (queue.player.state && queue.player.state.status === 'paused')));
+        const lyr = queue ? queue.currentLyrics : null;
+
+        const voiceChannels = guild ? guild.channels.cache
+            .filter(c => c.isVoiceBased())
+            .map(c => ({ id: c.id, name: c.name, count: c.members.filter(m => !m.user.bot).size })) : [];
+
+        const botVc = guild && queue && queue.voiceChannelId ? guild.channels.cache.get(queue.voiceChannelId) : null;
+        const listeners = botVc ? botVc.members.filter(m => !m.user.bot).map(m => ({
+            id: m.id,
+            name: m.displayName || m.user.username,
+            avatar: m.user.displayAvatarURL({ size: 64 })
+        })) : [];
+
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         return res.end(JSON.stringify({
-            isPlaying: !!isPlaying,
+            serverTime: Date.now(),
+            connected: !!(queue && queue.player),
+            isPlaying,
             isPaused,
-            currentTrack,
-            elapsedSeconds: queue ? queue.getPlaybackSeconds() : 0,
-            trackSeconds: currentTrack ? (currentTrack.seconds || 1) : 1,
+            current: isPlaying ? slim(queue.currentTrack) : null,
+            elapsed: queue ? queue.getPlaybackSeconds() : 0,
             volume: queue ? queue.volume : 100,
             speed: queue ? (queue.speed || 1.0) : 1.0,
-            activeFilter: queue ? (queue.activeFilter || 'none') : 'none',
-            loopMode: queue ? queue.loopMode : 'off',
-            queue: queue ? queue.queue : []
+            filter: queue ? (queue.activeFilter || 'none') : 'none',
+            loop: queue ? queue.loopMode : 'off',
+            queue: queue ? queue.queue.map(t => Object.assign(slim(t), { requester: t.requester ? t.requester.tag : null })) : [],
+            history: queue ? queue.history.slice(0, 15).map(h => Object.assign(slim(h), { playedAt: h.playedAt })) : [],
+            voiceChannelId: queue ? queue.voiceChannelId : null,
+            voiceChannelName: queue ? queue.voiceChannelName : null,
+            voiceChannels,
+            listeners,
+            hasLyrics: !!(lyr && ((lyr.syncedLyrics && lyr.syncedLyrics.length) || lyr.plainLyrics))
         }));
     }
 
