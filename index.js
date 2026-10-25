@@ -42,6 +42,11 @@ const client = new Client({
 // Initialize Lavalink early so connector can bind raw gateway packets
 musicManager.init(client);
 
+// Safety net: a stray rejected promise (e.g. a Lavalink node 403) must never crash the whole bot
+process.on('unhandledRejection', (reason) => {
+    console.error('[UNHANDLED REJECTION]', reason && reason.message ? reason.message : reason);
+});
+
 client.commands = new Collection();
 let overrideStatus = null; // null (normal/UP), 'MAINTENANCE', 'DOWN', 'DEGRADED', 'PARTIAL_OUTAGE'
 let overrideMessage = '';
@@ -1762,7 +1767,7 @@ const server = http.createServer(async (req, res) => {
                     const defaultVc = guild.channels.cache.find(c => c.isVoiceBased() && c.name.includes('Music')) || guild.channels.cache.find(c => c.isVoiceBased());
                     const defaultText = guild.channels.cache.find(c => c.name === 'music-commands') || guild.channels.cache.find(c => c.isTextBased());
                     if (defaultVc && defaultText) {
-                        queue.connect(defaultVc, defaultText);
+                        await queue.connect(defaultVc, defaultText);
                     }
                 }
 
@@ -1855,7 +1860,7 @@ const server = http.createServer(async (req, res) => {
                     const queue = musicManager.getQueue(guild.id);
                     const targetChannel = await client.channels.fetch(channelId).catch(() => null);
                     if (targetChannel && targetChannel.isVoiceBased()) {
-                        queue.connect(targetChannel, queue.textChannel || targetChannel);
+                        await queue.connect(targetChannel, queue.textChannel || targetChannel);
                     }
                 }
                 res.writeHead(200, { 'Content-Type': 'application/json' });

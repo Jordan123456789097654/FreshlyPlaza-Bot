@@ -205,13 +205,36 @@ class GuildMusicQueue {
         }
 
         if (!this.player) {
-            this.player = await musicManager.shoukaku.joinVoiceChannel({
-                guildId: this.guildId,
-                channelId: voiceChannel.id,
-                shardId: voiceChannel.guild.shardId || 0,
-                deaf: true
-            });
-            this.setupPlayerListeners();
+            // Try each connected node in turn; some public nodes reject sessions with 403
+            const nodes = Array.from(musicManager.shoukaku.nodes.values()).filter(n => n.state === 1);
+            if (nodes.length === 0) {
+                throw new Error('No Lavalink nodes are connected right now. Try again in a few seconds.');
+            }
+
+            let lastErr = null;
+            for (const node of nodes) {
+                try {
+                    this.player = await musicManager.shoukaku.joinVoiceChannel({
+                        guildId: this.guildId,
+                        channelId: voiceChannel.id,
+                        shardId: voiceChannel.guild.shardId || 0,
+                        deaf: true,
+                        nodeName: node.name
+                    });
+                    this.setupPlayerListeners();
+                    lastErr = null;
+                    break;
+                } catch (err) {
+                    lastErr = err;
+                    console.warn(`[LAVALINK] Node "${node.name}" rejected voice join (${err.status || err.message}), trying next node...`);
+                    try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
+                    this.player = null;
+                }
+            }
+
+            if (lastErr) {
+                throw new Error('All Lavalink nodes rejected the voice connection. Please try again shortly.');
+            }
         }
 
         return this.player;
