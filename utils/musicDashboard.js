@@ -143,10 +143,12 @@ h3 { font-size: 15px; font-weight: 800; }
 
             <div class="ctrls">
                 <button class="ctrl" id="bShuffle" title="Shuffle queue">🔀</button>
-                <button class="ctrl" id="bSkip" title="Skip">⏭️</button>
+                <button class="ctrl" id="bPrev" title="Previous track">⏮️</button>
                 <button class="ctrl big" id="bPlay" title="Play / Pause">⏸️</button>
+                <button class="ctrl" id="bSkip" title="Skip">⏭️</button>
                 <button class="ctrl" id="bStop" title="Stop">⏹️</button>
                 <button class="ctrl" id="bLoop" title="Loop mode">➡️</button>
+                <button class="ctrl" id="bAuto" title="Autoplay Radio when queue ends">📻</button>
             </div>
 
             <div class="slider"><span>🔊 Volume: <b id="volLbl">100%</b></span><input type="range" id="vol" min="1" max="200" value="100"></div>
@@ -248,7 +250,13 @@ h3 { font-size: 15px; font-weight: 800; }
 
         var conn = $('conn');
         conn.className = 'badge ' + (s.connected ? 'live' : 'off');
-        conn.textContent = s.connected ? 'LIVE' : 'BOT NOT IN VOICE';
+        conn.textContent = s.connected ? ('LIVE' + (s.activeNode ? ' • ' + s.activeNode : '')) : 'BOT NOT IN VOICE';
+
+        var autoBtn = $('bAuto');
+        if (autoBtn) {
+            autoBtn.style.borderColor = s.autoplay ? 'var(--green)' : '';
+            autoBtn.style.background = s.autoplay ? 'rgba(46,204,113,.22)' : '';
+        }
 
         var cur = s.current;
         var key = cur ? cur.url : '';
@@ -468,9 +476,11 @@ h3 { font-size: 15px; font-weight: 800; }
         if (S) { S.isPaused = !S.isPaused; $('bPlay').textContent = S.isPaused ? '▶️' : '⏸️'; base = { elapsed: currentElapsed(), at: Date.now() }; }
         act('toggle_pause');
     };
+    $('bPrev').onclick = function () { act('previous'); };
     $('bSkip').onclick = function () { act('skip'); };
     $('bStop').onclick = function () { act('stop'); };
     $('bShuffle').onclick = function () { act('shuffle'); };
+    $('bAuto').onclick = function () { act('autoplay').then(function () { toast(S && !S.autoplay ? '📻 Autoplay Radio ON' : '📻 Autoplay Radio OFF'); }); };
     $('bClear').onclick = function () { act('clear'); };
     $('bLoop').onclick = function () {
         var cur = S ? S.loop : 'off';

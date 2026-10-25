@@ -73,6 +73,12 @@ async function handleInteraction(interaction) {
             return interaction.followUp({ content: `🔁 Loop mode set to: **${labels[nextMode]}**`, flags: MessageFlags.Ephemeral });
         }
 
+        if (action === 'autoplay') {
+            queue.autoplay = !queue.autoplay;
+            await interaction.update({ components: [buildMusicControlRow(queue)] });
+            return interaction.followUp({ content: `📻 Autoplay Radio is now **${queue.autoplay ? 'ENABLED' : 'DISABLED'}**!`, flags: MessageFlags.Ephemeral });
+        }
+
         if (action === 'show_queue') {
             const queueEmbed = buildQueueEmbed(queue, 1);
             return interaction.reply({ embeds: [queueEmbed], flags: MessageFlags.Ephemeral });

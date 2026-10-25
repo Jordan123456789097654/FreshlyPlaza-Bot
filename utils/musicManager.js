@@ -99,11 +99,12 @@ class GuildMusicQueue {
         this.playbackStartTime = 0;
         this.pausedAt = 0;
 
-        // Synced Lyrics & Sleep Timer
+        // Synced Lyrics, Autoplay & Sleep Timer
         this.currentLyrics = null;
         this.sleepTimeout = null;
         this.sleepEndsAt = null;
         this.skipVotes = new Set();
+        this.autoplay = false;
     }
 
     setupPlayerListeners() {
@@ -174,6 +175,17 @@ class GuildMusicQueue {
             if (this.queue.length > 0) {
                 const nextTrack = this.queue.shift();
                 await this.playTrack(nextTrack);
+            } else if (this.autoplay && finishedTrack && reason !== 'stopped') {
+                try {
+                    const related = await musicManager.findRelatedTrack(finishedTrack, this.history);
+                    if (related) {
+                        await this.playTrack(related);
+                        return;
+                    }
+                } catch (_) {}
+                this.isPlaying = false;
+                musicManager.updateDiscordPresence();
+                this.scheduleDisconnect();
             } else {
                 this.isPlaying = false;
                 musicManager.updateDiscordPresence();
@@ -265,20 +277,23 @@ class GuildMusicQueue {
             for (const node of nodes) {
                 try {
                     try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
+                    musicManager.preferredNodeName = node.name;
                     this.player = await musicManager.shoukaku.joinVoiceChannel({
                         guildId: this.guildId,
                         channelId: voiceChannel.id,
                         shardId: voiceChannel.guild.shardId || 0,
-                        deaf: true,
-                        nodeName: node.name
+                        deaf: true
                     });
+                    musicManager.preferredNodeName = null;
                     this.setupPlayerListeners();
                     lastErr = null;
                     break;
                 } catch (err) {
+                    musicManager.preferredNodeName = null;
                     lastErr = err;
-                    console.warn(`[LAVALINK] Node "${node.name}" rejected voice join (${err.status || err.message}), marking bad and trying next node...`);
-                    musicManager.markBad(node.name);
+                    const actualFailedNode = (err && err.nodeName) || node.name;
+                    console.warn(`[LAVALINK] Node "${actualFailedNode}" rejected voice join (${err.status || err.message}), marking bad and trying next node...`);
+                    musicManager.markBad(actualFailedNode);
                     try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
                     this.player = null;
                 }
@@ -325,24 +340,23 @@ class GuildMusicQueue {
                 ? null
                 : track.encoded;
 
-            if (!trackEncoded) {
-                const candidateNodes = [];
-                if (this.player.node) candidateNodes.push(this.player.node);
-                for (const n of musicManager.getHealthyNodes()) {
-                    if (!candidateNodes.includes(n)) candidateNodes.push(n);
+            if (!trackEncoded && this.player.node) {
+                const node = this.player.node;
+                const queriesToTry = [];
+                if (track.url && (track.url.startsWith('http://') || track.url.startsWith('https://'))) {
+                    queriesToTry.push(track.url);
+                }
+                const searchStr = `${track.title || ''} ${track.author || ''}`.trim();
+                if (searchStr) {
+                    queriesToTry.push(`ytsearch:${searchStr}`);
+                    queriesToTry.push(`ytmsearch:${searchStr}`);
+                    queriesToTry.push(`scsearch:${searchStr}`);
                 }
 
-                for (const node of candidateNodes) {
+                for (const qTarget of queriesToTry) {
                     try {
-                        let queryTarget = track.url;
-                        if (!queryTarget || (!queryTarget.startsWith('http://') && !queryTarget.startsWith('https://'))) {
-                            queryTarget = `ytsearch:${track.title} ${track.author || ''}`.trim();
-                        }
-                        let res = await node.rest.resolve(queryTarget);
-                        if ((!res || !res.data || res.loadType === 'empty' || res.loadType === 'error') && queryTarget.startsWith('http')) {
-                            res = await node.rest.resolve(`ytsearch:${track.title} ${track.author || ''}`.trim());
-                        }
-                        if (res && res.data) {
+                        const res = await node.rest.resolve(qTarget);
+                        if (res && res.data && res.loadType !== 'empty' && res.loadType !== 'error') {
                             trackEncoded = Array.isArray(res.data)
                                 ? res.data[0]?.encoded
                                 : (res.data.encoded || res.data.tracks?.[0]?.encoded);
@@ -357,7 +371,7 @@ class GuildMusicQueue {
             }
 
             if (!trackEncoded) {
-                throw new Error('Could not encode track audio stream from Lavalink node');
+                throw new Error(`Node "${playerNodeName || 'unknown'}" could not encode track stream`);
             }
 
             // Play track via Lavalink
@@ -370,18 +384,18 @@ class GuildMusicQueue {
             await this.player.setGlobalVolume(this.volume);
             await this.applyFilter(this.activeFilter, this.speed, false);
         } catch (err) {
-            // The node accepted the voice join but refuses to play (403 / 5xx / timeout):
-            // blacklist it for a while, move this guild to another node, and retry once.
-            const nodeFailure = err && (err.status === 403 || err.status >= 500 || err.name === 'RestError');
-            if (!_retried && nodeFailure && this.voiceChannel && musicManager.shoukaku) {
+            // The node accepted the voice join but refuses to play (403 / 404 / 5xx / encode failure):
+            // blacklist it, move this guild to the next healthy node, and retry up to 2 times.
+            const retryCount = typeof _retried === 'number' ? _retried : (_retried ? 1 : 0);
+            if (retryCount < 2 && this.voiceChannel && musicManager.shoukaku) {
                 const badName = this.player && this.player.node ? this.player.node.name : null;
-                console.warn(`[LAVALINK] Node "${badName || 'unknown'}" failed to play (${err.status || err.message}). Failing over...`);
+                console.warn(`[LAVALINK] Node "${badName || 'unknown'}" failed to play (${err.status || err.message}). Failing over (attempt ${retryCount + 1})...`);
                 if (badName) musicManager.markBad(badName);
                 try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
                 this.player = null;
                 try {
                     await this.connect(this.voiceChannel, this.textChannel);
-                    return this.playTrack(track, seekSeconds, true);
+                    return this.playTrack(track, seekSeconds, retryCount + 1);
                 } catch (failoverErr) {
                     err = failoverErr;
                 }
@@ -495,6 +509,16 @@ class GuildMusicQueue {
         return true;
     }
 
+    async previous() {
+        if (!this.history || this.history.length === 0) return null;
+        const prevTrack = this.history.shift();
+        if (this.currentTrack) {
+            this.queue.unshift(this.currentTrack);
+        }
+        await this.playTrack(prevTrack);
+        return prevTrack;
+    }
+
     async skip() {
         if (!this.currentTrack) return null;
         const skipped = this.currentTrack;
@@ -593,6 +617,7 @@ const musicManager = {
     clientRef: null,
     shoukaku: null,
     badNodes: new Map(),
+    preferredNodeName: null,
 
     markBad(nodeName, ttlMs = 180000) {
         if (!nodeName) return;
@@ -613,14 +638,43 @@ const musicManager = {
         return connected;
     },
 
+    getNodesStatus() {
+        if (!this.shoukaku) return [];
+        const now = Date.now();
+        return Array.from(this.shoukaku.nodes.values()).map(n => ({
+            name: n.name,
+            connected: n.state === 1,
+            quarantined: this.badNodes.has(n.name) && this.badNodes.get(n.name) > now,
+            players: n.stats ? n.stats.playingPlayers || 0 : 0,
+            ping: n.ping || 0
+        }));
+    },
+
+    async findRelatedTrack(seedTrack, history = []) {
+        if (!seedTrack) return null;
+        const playedUrls = new Set((history || []).map(h => h.url));
+        if (seedTrack.url) playedUrls.add(seedTrack.url);
+
+        const cleanArtist = (seedTrack.author || '').replace(/VEVO|Official|Topic|-/gi, '').trim();
+        const searchQuery = cleanArtist ? `${cleanArtist} popular songs` : `${seedTrack.title} mix`;
+        const res = await this.resolveQuery(searchQuery, seedTrack.requester || { id: 'AUTOPLAY', tag: '📻 Autoplay DJ' });
+        const candidates = res.results || (res.track ? [res.track] : []);
+        const pick = candidates.find(t => t && t.url && !playedUrls.has(t.url)) || candidates[1] || candidates[0];
+        if (!pick) return null;
+        return {
+            ...pick,
+            requester: { id: 'AUTOPLAY', tag: '📻 Autoplay DJ', avatar: null }
+        };
+    },
+
     init(client) {
         this.clientRef = client;
 
         const nodes = config.lavalinkNodes || [
             {
-                name: 'Serenetia-SSL',
-                url: 'lavalinkv4.serenetia.com:443',
-                auth: 'https://dsc.gg/ajidevserver',
+                name: 'Trinium-SSL',
+                url: 'lavalink-v4.triniumhost.com:443',
+                auth: 'free',
                 secure: true
             }
         ];
@@ -632,7 +686,15 @@ const musicManager = {
                 moveOnDisconnect: false,
                 resume: false,
                 reconnectTries: 3,
-                reconnectInterval: 30
+                reconnectInterval: 30,
+                nodeResolver: (nodesMap) => {
+                    if (this.preferredNodeName) {
+                        const preferred = nodesMap.get(this.preferredNodeName);
+                        if (preferred && preferred.state === 1) return preferred;
+                    }
+                    const healthy = this.getHealthyNodes();
+                    return healthy[0] || Array.from(nodesMap.values()).find(n => n.state === 1) || null;
+                }
             }
         );
 

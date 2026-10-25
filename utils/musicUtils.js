@@ -10,6 +10,7 @@ function buildNowPlayingEmbed(track, queue) {
     const filterLabel = queue.activeFilter !== 'none' ? `🎛️ ${queue.activeFilter.toUpperCase()}` : 'Default (Clean)';
     const speedLabel = queue.speed !== 1.0 ? `${queue.speed}x` : '1.0x';
     const requesterMention = track.requester && track.requester.id ? `<@${track.requester.id}>` : (track.requester && track.requester.tag ? track.requester.tag : 'Web Dashboard');
+    const nodeName = queue.player && queue.player.node ? queue.player.node.name : 'Auto';
 
     const embed = new EmbedBuilder()
         .setTitle('🎵 Now Playing')
@@ -20,12 +21,12 @@ function buildNowPlayingEmbed(track, queue) {
             { name: '🔊 Volume', value: `${queue.volume}%`, inline: true },
             { name: '⚡ Speed / Pitch', value: `\`${speedLabel}\``, inline: true },
             { name: '🎛️ DSP Preset', value: `\`${filterLabel}\``, inline: true },
-            { name: '🔁 Loop Mode', value: loopStatus, inline: true },
+            { name: '🔁 Loop / Radio', value: `${loopStatus}${queue.autoplay ? ' • 📻 Auto' : ''}`, inline: true },
             { name: '📑 In Queue', value: `${queue.queue.length} track(s)`, inline: true },
             { name: '👤 Requested By', value: requesterMention, inline: true }
         )
         .setColor(config.colors.primary)
-        .setFooter({ text: `Grandway Music • Status: ${isPaused ? '⏸️ Paused' : '▶️ Playing'}` })
+        .setFooter({ text: `Grandway Music • Node: ${nodeName} • Status: ${isPaused ? '⏸️ Paused' : '▶️ Playing'}` })
         .setTimestamp();
 
     if (track.thumbnail) {
@@ -59,9 +60,9 @@ function buildMusicControlRow(queue) {
             .setLabel(`🔁 Loop (${queue.loopMode.toUpperCase()})`)
             .setStyle(queue.loopMode === 'off' ? ButtonStyle.Secondary : ButtonStyle.Success),
         new ButtonBuilder()
-            .setCustomId('btn_music_show_queue')
-            .setLabel('📜 Queue')
-            .setStyle(ButtonStyle.Secondary)
+            .setCustomId('btn_music_autoplay')
+            .setLabel(`📻 Auto (${queue.autoplay ? 'ON' : 'OFF'})`)
+            .setStyle(queue.autoplay ? ButtonStyle.Success : ButtonStyle.Secondary)
     );
 }
 

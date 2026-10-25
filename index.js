@@ -1613,6 +1613,8 @@ const server = http.createServer(async (req, res) => {
                     } else {
                         await queue.pause();
                     }
+                } else if (action === 'previous') {
+                    await queue.previous();
                 } else if (action === 'skip') {
                     await queue.skip();
                 } else if (action === 'stop') {
@@ -1621,6 +1623,8 @@ const server = http.createServer(async (req, res) => {
                     queue.shuffle();
                 } else if (action === 'clear') {
                     queue.queue = [];
+                } else if (action === 'autoplay') {
+                    queue.autoplay = !queue.autoplay;
                 } else if (action === 'seek' && seconds !== undefined) {
                     await queue.seek(seconds);
                 }
@@ -1914,8 +1918,11 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({
             serverTime: Date.now(),
             connected: !!(queue && queue.player),
+            activeNode: queue && queue.player && queue.player.node ? queue.player.node.name : null,
+            nodes: musicManager.getNodesStatus ? musicManager.getNodesStatus() : [],
             isPlaying,
             isPaused,
+            autoplay: !!(queue && queue.autoplay),
             current: isPlaying ? slim(queue.currentTrack) : null,
             elapsed: queue ? queue.getPlaybackSeconds() : 0,
             volume: queue ? queue.volume : 100,
