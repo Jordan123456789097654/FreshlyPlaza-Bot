@@ -1569,7 +1569,16 @@ const server = http.createServer(async (req, res) => {
 
         const voiceChannels = guild ? guild.channels.cache
             .filter(c => c.isVoiceBased())
-            .map(c => ({ id: c.id, name: c.name, membersCount: c.members.size })) : [];
+            .map(c => ({
+                id: c.id,
+                name: c.name,
+                membersCount: c.members.size,
+                members: c.members.filter(m => !m.user.bot).map(m => ({
+                    id: m.id,
+                    username: m.displayName || m.user.username,
+                    avatar: m.user.displayAvatarURL({ size: 64 })
+                }))
+            })) : [];
 
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         return res.end(renderMusicDashboard(queue, voiceChannels));
@@ -1598,17 +1607,20 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/music/control' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
-        req.on('end', () => {
+        req.on('end', async () => {
             try {
-                const { action } = JSON.parse(body);
+                const { action, seconds } = JSON.parse(body);
                 const musicManager = require('./utils/musicManager');
                 const guild = client.guilds.cache.get(config.guildId);
                 if (!guild) return res.end(JSON.stringify({ error: 'Guild not ready' }));
                 const queue = musicManager.getQueue(guild.id);
 
                 if (action === 'toggle_pause') {
-                    if (queue.player.state.status === 'paused') queue.resume();
-                    else queue.pause();
+                    if (queue.player && (queue.player.paused || (queue.player.state && queue.player.state.status === 'paused'))) {
+                        queue.resume();
+                    } else {
+                        queue.pause();
+                    }
                 } else if (action === 'skip') {
                     queue.skip();
                 } else if (action === 'stop') {
@@ -1617,6 +1629,16 @@ const server = http.createServer(async (req, res) => {
                     queue.shuffle();
                 } else if (action === 'clear') {
                     queue.queue = [];
+                } else if (action === 'seek' && seconds !== undefined) {
+                    if (queue.player && queue.currentTrack) {
+                        const targetMs = Math.max(0, Math.floor(seconds * 1000));
+                        if (typeof queue.player.seekTo === 'function') {
+                            await queue.player.seekTo(targetMs);
+                        } else if (queue.player.playTrack) {
+                            await queue.player.playTrack({ track: { encoded: queue.currentTrack.encoded }, position: targetMs });
+                        }
+                        queue.playbackStartTime = Date.now() - (seconds * 1000);
+                    }
                 }
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1627,6 +1649,35 @@ const server = http.createServer(async (req, res) => {
             }
         });
         return;
+    }
+
+    // 7.8.1 YouTube Instant Autocomplete Search
+    if (pathname === '/api/music/search' && req.method === 'GET') {
+        try {
+            const parsed = new URL(req.url, `http://${req.headers.host}`);
+            const query = parsed.searchParams.get('q');
+            if (!query || !query.trim()) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify([]));
+            }
+
+            const yts = require('yt-search');
+            const searchRes = await yts(query.trim());
+            const videos = (searchRes && searchRes.videos ? searchRes.videos.slice(0, 5) : []).map(v => ({
+                title: v.title,
+                url: v.url,
+                duration: v.timestamp || `${Math.floor(v.seconds / 60)}:${(v.seconds % 60).toString().padStart(2, '0')}`,
+                seconds: v.seconds,
+                author: v.author ? v.author.name : 'Unknown Artist',
+                thumbnail: v.thumbnail || v.image || null
+            }));
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify(videos));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: e.message }));
+        }
     }
 
     if (pathname === '/api/music/volume' && req.method === 'POST') {

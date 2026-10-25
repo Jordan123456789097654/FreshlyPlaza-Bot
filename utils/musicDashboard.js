@@ -289,7 +289,39 @@ function renderMusicDashboard(queue, voiceChannels = []) {
         .empty-queue-msg { text-align: center; color: var(--text-muted); font-size: 13px; padding: 40px 20px; }
 
         /* Search input bar */
-        .search-add-bar { display: flex; gap: 10px; margin-top: 14px; }
+        .search-add-bar { display: flex; gap: 10px; margin-top: 14px; position: relative; }
+        .search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 6px;
+            background: #0f172a;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+        .search-drop-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .search-drop-item:hover {
+            background: rgba(46, 204, 113, 0.15);
+        }
+        .search-drop-item img {
+            width: 48px;
+            height: 36px;
+            object-fit: cover;
+            border-radius: 6px;
+        }
         .search-input {
             flex: 1;
             background: #090e1a;
@@ -376,13 +408,22 @@ function renderMusicDashboard(queue, voiceChannels = []) {
             </div>
         </div>
 
-        <!-- Voice Channel Switcher -->
+        <!-- Voice Channel Switcher & Listening Members -->
         <div class="vc-bar">
             <div>
                 <strong style="color: #fff;">🔊 Current Voice Channel:</strong>
                 <span id="currentVcName" style="color: #60a5fa; font-weight: 700; margin-left: 6px;">${escapeHtml(queue ? queue.voiceChannelName : 'Disconnected')}</span>
             </div>
-            <div style="display: flex; gap: 10px; align-items: center;">
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <div id="listeningAvatars" style="display: flex; align-items: center; gap: -6px;">
+                    ${(() => {
+                        const activeVc = voiceChannels.find(v => queue && queue.voiceChannelId === v.id);
+                        if (!activeVc || !activeVc.members || activeVc.members.length === 0) return '<span style="font-size: 12px; color: var(--text-muted);">0 in VC</span>';
+                        return activeVc.members.slice(0, 5).map(m => `
+                            <img src="${m.avatar}" title="${escapeHtml(m.username)}" style="width: 26px; height: 26px; border-radius: 50%; border: 2px solid #0f172a; margin-left: -6px;" />
+                        `).join('') + (activeVc.members.length > 5 ? `<span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">+${activeVc.members.length - 5}</span>` : '');
+                    })()}
+                </div>
                 <select id="vcSelect" class="vc-select">
                     ${vcOptions}
                 </select>
@@ -405,6 +446,7 @@ function renderMusicDashboard(queue, voiceChannels = []) {
                 <!-- Animated Waveform Visualizer -->
                 <div class="visualizer-wrap">
                     <canvas id="waveformCanvas"></canvas>
+                    <button id="btnVisTheme" onclick="toggleVisualizerTheme()" style="position: absolute; top: 8px; right: 8px; background: rgba(15,23,42,0.8); border: 1px solid rgba(255,255,255,0.1); color: #cbd5e1; font-size: 11px; padding: 4px 8px; border-radius: 6px; cursor: pointer;">🎨 Style: BARS</button>
                 </div>
 
                 <!-- Progress Bar -->
@@ -467,10 +509,11 @@ function renderMusicDashboard(queue, voiceChannels = []) {
                     <button class="btn-action" style="background: rgba(239,68,68,0.15); color: #fca5a5; font-size: 12px;" onclick="sendAction('clear')">Clear Queue</button>
                 </div>
 
-                <!-- Add to Queue Input -->
-                <div class="search-add-bar">
-                    <input type="text" id="addTrackInput" class="search-input" placeholder="🔍 Search track or paste YouTube URL..." onkeydown="if(event.key === 'Enter') addTrack()">
+                <!-- Add to Queue Input with Live Autocomplete -->
+                <div class="search-add-bar" style="position: relative;">
+                    <input type="text" id="addTrackInput" class="search-input" placeholder="🔍 Search track or paste YouTube URL..." oninput="handleSearchInput(this.value)" onkeydown="if(event.key === 'Enter') addTrack()">
                     <button class="btn-action btn-chat" onclick="addTrack()">+ Queue</button>
+                    <div id="searchDropdown" class="search-dropdown" style="display: none;"></div>
                 </div>
 
                 <div class="queue-items" id="queueList">
@@ -518,40 +561,155 @@ function renderMusicDashboard(queue, voiceChannels = []) {
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
+        let visualizerTheme = 'bars'; // 'bars' | 'circle' | 'pulse'
         let wavePhase = 0;
         function renderWaveform() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const numBars = 48;
-            const barWidth = canvas.width / numBars - 2;
             const centerY = canvas.height / 2;
+            const centerX = canvas.width / 2;
 
-            for (let i = 0; i < numBars; i++) {
-                const amp = isPlaying && !isPaused ? Math.sin(wavePhase + i * 0.25) * 0.5 + 0.5 : 0.05;
-                const barHeight = Math.max(4, amp * (canvas.height * 0.75));
-                const x = i * (barWidth + 2);
-                const y = centerY - barHeight / 2;
+            if (visualizerTheme === 'circle') {
+                const radius = Math.min(canvas.width, canvas.height) * 0.28;
+                const numPoints = 64;
+                ctx.beginPath();
+                for (let i = 0; i <= numPoints; i++) {
+                    const angle = (i / numPoints) * Math.PI * 2;
+                    const amp = isPlaying && !isPaused ? Math.sin(wavePhase * 1.5 + i * 0.4) * 16 : 2;
+                    const r = radius + amp;
+                    const x = centerX + Math.cos(angle) * r;
+                    const y = centerY + Math.sin(angle) * r;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.strokeStyle = '#2ECC71';
+                ctx.lineWidth = 3;
+                ctx.stroke();
 
-                const grad = ctx.createLinearGradient(0, y, 0, y + barHeight);
-                grad.addColorStop(0, '#2ECC71');
-                grad.addColorStop(1, '#3498DB');
-                ctx.fillStyle = grad;
-                ctx.fillRect(x, y, barWidth, barHeight);
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius * 0.65, 0, Math.PI * 2);
+                ctx.fillStyle = '#1e293b';
+                ctx.fill();
+            } else if (visualizerTheme === 'pulse') {
+                const numRings = 4;
+                for (let r = 1; r <= numRings; r++) {
+                    const radius = (r * 22 + (wavePhase * 15) % 80);
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                    const alpha = Math.max(0, 1 - radius / 120);
+                    ctx.strokeStyle = 'rgba(46, 204, 113, ' + alpha + ')';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            } else {
+                // Default bars
+                const numBars = 48;
+                const barWidth = canvas.width / numBars - 2;
+                for (let i = 0; i < numBars; i++) {
+                    const amp = isPlaying && !isPaused ? Math.sin(wavePhase + i * 0.25) * 0.5 + 0.5 : 0.05;
+                    const barHeight = Math.max(4, amp * (canvas.height * 0.75));
+                    const x = i * (barWidth + 2);
+                    const y = centerY - barHeight / 2;
+
+                    const grad = ctx.createLinearGradient(0, y, 0, y + barHeight);
+                    grad.addColorStop(0, '#2ECC71');
+                    grad.addColorStop(1, '#3498DB');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(x, y, barWidth, barHeight);
+                }
             }
+
             if (isPlaying && !isPaused) wavePhase += 0.08;
             requestAnimationFrame(renderWaveform);
         }
         requestAnimationFrame(renderWaveform);
 
-        // Timer Increment
-        setInterval(() => {
-            if (isPlaying && !isPaused) {
-                currentElapsed++;
-                const pct = Math.min(100, (currentElapsed / Math.max(1, totalDuration)) * 100);
-                document.getElementById('progressFill').style.width = pct + '%';
-                document.getElementById('timeElapsed').innerText = formatSecs(currentElapsed);
-                updateLiveLyrics(currentElapsed);
+        function toggleVisualizerTheme() {
+            if (visualizerTheme === 'bars') visualizerTheme = 'circle';
+            else if (visualizerTheme === 'circle') visualizerTheme = 'pulse';
+            else visualizerTheme = 'bars';
+            const btn = document.getElementById('btnVisTheme');
+            if (btn) btn.innerText = '🎨 Style: ' + visualizerTheme.toUpperCase();
+        }
+
+        // Interactive Scrubbing / Seek bar
+        async function seekTrack(e) {
+            if (!isPlaying) return;
+            const bar = e.currentTarget;
+            const rect = bar.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+            const targetSec = Math.floor(ratio * totalDuration);
+
+            currentElapsed = targetSec;
+            document.getElementById('progressFill').style.width = (ratio * 100) + '%';
+            document.getElementById('timeElapsed').innerText = formatSecs(targetSec);
+            updateLiveLyrics(targetSec);
+
+            await fetch('/api/music/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'seek', seconds: targetSec })
+            }).catch(() => {});
+        }
+
+        // Click-To-Seek on Lyric Lines
+        async function jumpToLyric(sec) {
+            currentElapsed = Math.floor(sec);
+            document.getElementById('progressFill').style.width = ((currentElapsed / Math.max(1, totalDuration)) * 100) + '%';
+            document.getElementById('timeElapsed').innerText = formatSecs(currentElapsed);
+            updateLiveLyrics(currentElapsed);
+
+            await fetch('/api/music/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'seek', seconds: currentElapsed })
+            }).catch(() => {});
+        }
+
+        // Live YouTube Autocomplete Search
+        let searchDebounce = null;
+        async function handleSearchInput(val) {
+            const dropdown = document.getElementById('searchDropdown');
+            if (!dropdown) return;
+            if (!val || val.trim().length < 2) {
+                dropdown.style.display = 'none';
+                return;
             }
-        }, 1000);
+
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(async () => {
+                try {
+                    const res = await fetch('/api/music/search?q=' + encodeURIComponent(val));
+                    const results = await res.json();
+                    if (!results || results.length === 0) {
+                        dropdown.style.display = 'none';
+                        return;
+                    }
+
+                    dropdown.innerHTML = results.map(r => 
+                        '<div class="search-drop-item" onclick="quickPlay(\\'' + r.url + '\\')">' +
+                            '<img src="' + (r.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=80') + '" />' +
+                            '<div style="flex: 1; min-width: 0;">' +
+                                '<div style="font-weight: 700; color: #fff; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + (r.title || '') + '</div>' +
+                                '<div style="font-size: 11px; color: var(--text-muted);">' + (r.author || '') + ' • ' + (r.duration || '') + '</div>' +
+                            '</div>' +
+                            '<span style="font-size: 11px; color: #34d399; font-weight: 700;">+ Queue</span>' +
+                        '</div>'
+                    ).join('');
+                    dropdown.style.display = 'block';
+                } catch (_) {
+                    dropdown.style.display = 'none';
+                }
+            }, 300);
+        }
+
+        document.addEventListener('click', (e) => {
+            const drop = document.getElementById('searchDropdown');
+            if (drop && !e.target.closest('.search-add-bar')) {
+                drop.style.display = 'none';
+            }
+        });
 
         // Live Auto-Sync: Poll state every 2.5 seconds to synchronize multiple listeners seamlessly
         let lastTrackTitle = '${trackTitle}';
@@ -730,11 +888,13 @@ function renderMusicDashboard(queue, voiceChannels = []) {
                 const data = await res.json();
                 if (data.syncedLyrics && data.syncedLyrics.length > 0) {
                     lyricsData = data.syncedLyrics;
-                    container.innerHTML = lyricsData.map((l, i) => \`
-                        <div class="lyric-line" id="lyric-\${i}">[\${formatSecs(l.time)}] \${l.text || '♪'}</div>
-                    \`).join('');
+                    container.innerHTML = lyricsData.map((l, i) => 
+                        '<div class="lyric-line" id="lyric-' + i + '" onclick="jumpToLyric(' + l.time + ')" style="cursor: pointer;" title="Click to jump to this lyric">' +
+                            '<span style="opacity: 0.6; font-size: 11px; margin-right: 8px;">[' + formatSecs(l.time) + ']</span> ' + (l.text || '♪') +
+                        '</div>'
+                    ).join('');
                 } else if (data.plainLyrics) {
-                    container.innerHTML = '<div style="white-space: pre-line; color: #cbd5e1;">' + data.plainLyrics + '</div>';
+                    container.innerHTML = '<div style="white-space: pre-line; color: #cbd5e1; line-height: 1.8;">' + data.plainLyrics + '</div>';
                 } else {
                     container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px;">No synchronized lyrics found for this song.</div>';
                 }

@@ -9,13 +9,33 @@ const lyricsService = {
      */
     async fetchLyrics(query) {
         if (!query || !query.trim()) return null;
-        // Clean query to remove noise like (Official Video), [4K], etc.
-        const cleanQuery = query
-            .replace(/\b(?:official\s*(?:video|audio|music\s*video|lyric\s*video)|4k|remastered|hd|hq)\b/gi, '')
-            .replace(/[([][^)\]]*[)\]]/g, '')
+        
+        // Multi-stage cleaning to match LRCLIB's database
+        // Strip parentheses like (Official Video), (Lyrics), (Visualizer), [Audio]
+        let cleaned = query
+            .replace(/\(.*?\)|\[.*?\]/g, '')
+            .replace(/\b(?:official\s*(?:video|audio|music\s*video|lyric\s*video)|4k|remastered|hd|hq|audio|video|lyrics)\b/gi, '')
+            .replace(/ft\..*|feat\..*/i, '')
+            .replace(/[-–—|•]/g, ' ')
+            .replace(/\s+/g, ' ')
             .trim();
 
-        const url = `https://lrclib.net/api/search?q=${encodeURIComponent(cleanQuery)}`;
+        const searchCandidates = [
+            cleaned,
+            cleaned.replace(/VEVO/gi, '').trim(),
+            query.split('-')[1]?.trim() || null // Try just song name if artist - song
+        ].filter(Boolean);
+
+        for (const candidate of searchCandidates) {
+            const result = await this._queryLrclib(candidate);
+            if (result) return result;
+        }
+
+        return null;
+    },
+
+    _queryLrclib(q) {
+        const url = `https://lrclib.net/api/search?q=${encodeURIComponent(q)}`;
         return new Promise((resolve) => {
             const req = https.get(url, { headers: { 'User-Agent': 'GrandwayMusic/2.0 (Discord Bot)' } }, (res) => {
                 let data = '';
@@ -24,13 +44,14 @@ const lyricsService = {
                     try {
                         const json = JSON.parse(data);
                         if (Array.isArray(json) && json.length > 0) {
-                            const match = json[0];
+                            // Find best match with synced lyrics first
+                            const bestMatch = json.find(j => j.syncedLyrics) || json[0];
                             resolve({
-                                trackName: match.trackName,
-                                artistName: match.artistName,
-                                plainLyrics: match.plainLyrics || null,
-                                syncedLyrics: match.syncedLyrics ? this.parseLrc(match.syncedLyrics) : null,
-                                rawSynced: match.syncedLyrics || null
+                                trackName: bestMatch.trackName,
+                                artistName: bestMatch.artistName,
+                                plainLyrics: bestMatch.plainLyrics || null,
+                                syncedLyrics: bestMatch.syncedLyrics ? this.parseLrc(bestMatch.syncedLyrics) : null,
+                                rawSynced: bestMatch.syncedLyrics || null
                             });
                         } else {
                             resolve(null);
@@ -41,7 +62,7 @@ const lyricsService = {
                 });
             });
             req.on('error', () => resolve(null));
-            req.setTimeout(5000, () => {
+            req.setTimeout(4000, () => {
                 req.destroy();
                 resolve(null);
             });
