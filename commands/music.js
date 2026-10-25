@@ -89,7 +89,7 @@ module.exports = [
                     });
                 }
 
-                queue.connect(voiceChannel, interaction.channel);
+                await queue.connect(voiceChannel, interaction.channel);
 
                 if (result.type === 'playlist') {
                     // Check max duration per track
@@ -398,7 +398,7 @@ module.exports = [
                     return interaction.reply({ content: '🔊 Connect to a voice channel first to load a playlist!', flags: MessageFlags.Ephemeral });
                 }
 
-                queue.connect(voiceChannel, interaction.channel);
+                await queue.connect(voiceChannel, interaction.channel);
                 playlist.tracks.forEach(t => {
                     queue.queue.push({
                         ...t,
@@ -508,7 +508,7 @@ module.exports = [
                     return interaction.reply({ content: '🔊 Please join a voice channel first.', flags: MessageFlags.Ephemeral });
                 }
 
-                queue.connect(voiceChannel, interaction.channel);
+                await queue.connect(voiceChannel, interaction.channel);
                 favs.forEach(t => {
                     queue.queue.push({
                         ...t,

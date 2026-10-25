@@ -1,46 +1,82 @@
-const { 
-    AudioPlayerStatus, 
-    createAudioPlayer, 
-    createAudioResource, 
-    joinVoiceChannel, 
-    VoiceConnectionStatus, 
-    entersState,
-    StreamType
-} = require('@discordjs/voice');
-const ffmpegStatic = require('ffmpeg-static');
-const prism = require('prism-media');
-const { Ytdl, Quality } = require('@distube/ytdl-core');
-const yts = require('yt-search');
+const { Shoukaku, Connectors } = require('shoukaku');
 const config = require('../config');
+const yts = require('yt-search');
 const lyricsService = require('./lyricsService');
 
-// Ensure ffmpeg path is set in process environment
-if (ffmpegStatic && !process.env.FFMPEG_PATH) {
-    process.env.FFMPEG_PATH = ffmpegStatic;
-}
-
-const yt = new Ytdl();
-
 /**
- * Filter Presets definitions
+ * Filter Presets mapped directly to Lavalink Audio Filters (equalizer, timescale, karaoke)
+ * Executed remotely on the Lavalink server with 0 CPU & 0 RAM load on the bot container!
  */
-const DSP_PRESETS = {
-    bassboost_low: 'equalizer=f=60:width_type=h:width=50:g=6,equalizer=f=120:width_type=h:width=80:g=4',
-    bassboost_medium: 'equalizer=f=60:width_type=h:width=50:g=12,equalizer=f=120:width_type=h:width=80:g=8',
-    bassboost_hard: 'equalizer=f=60:width_type=h:width=50:g=18,equalizer=f=120:width_type=h:width=80:g=12',
-    bassboost_extreme: 'equalizer=f=60:width_type=h:width=50:g=25,equalizer=f=120:width_type=h:width=80:g=16',
-    nightcore: 'asetrate=48000*1.25,aresample=48000',
-    vaporwave: 'asetrate=48000*0.85,aresample=48000,aecho=0.8:0.9:1000:0.3',
-    spatial_8d: 'apulsator=hz=0.125',
-    karaoke: 'pan=stereo|c0=c0-c1|c1=c1-c0',
-    treble_boost: 'treble=g=8',
-    pop: 'equalizer=f=60:width_type=h:width=50:g=-1.5,equalizer=f=170:width_type=h:width=100:g=3.9,equalizer=f=310:width_type=h:width=150:g=5.4,equalizer=f=600:width_type=h:width=300:g=4.5,equalizer=f=1000:width_type=h:width=500:g=1.5,equalizer=f=3000:width_type=h:width=1500:g=-1.5,equalizer=f=6000:width_type=h:width=3000:g=-1.5',
-    rock: 'equalizer=f=60:width_type=h:width=50:g=4.8,equalizer=f=170:width_type=h:width=100:g=3,equalizer=f=310:width_type=h:width=150:g=-3.3,equalizer=f=600:width_type=h:width=300:g=-4.5,equalizer=f=1000:width_type=h:width=500:g=1.5,equalizer=f=3000:width_type=h:width=1500:g=3.6,equalizer=f=6000:width_type=h:width=3000:g=5.1',
-    classical: 'equalizer=f=60:width_type=h:width=50:g=4.5,equalizer=f=170:width_type=h:width=100:g=3.6,equalizer=f=310:width_type=h:width=150:g=3,equalizer=f=600:width_type=h:width=300:g=-2.4,equalizer=f=1000:width_type=h:width=500:g=-2.4,equalizer=f=3000:width_type=h:width=1500:g=1.5,equalizer=f=6000:width_type=h:width=3000:g=3.9'
+const LAVALINK_PRESETS = {
+    bassboost_low: {
+        equalizer: [
+            { band: 0, gain: 0.15 },
+            { band: 1, gain: 0.10 },
+            { band: 2, gain: 0.05 }
+        ]
+    },
+    bassboost_medium: {
+        equalizer: [
+            { band: 0, gain: 0.30 },
+            { band: 1, gain: 0.20 },
+            { band: 2, gain: 0.10 }
+        ]
+    },
+    bassboost_hard: {
+        equalizer: [
+            { band: 0, gain: 0.45 },
+            { band: 1, gain: 0.30 },
+            { band: 2, gain: 0.15 }
+        ]
+    },
+    bassboost_extreme: {
+        equalizer: [
+            { band: 0, gain: 0.65 },
+            { band: 1, gain: 0.45 },
+            { band: 2, gain: 0.25 }
+        ]
+    },
+    nightcore: {
+        timescale: { speed: 1.25, pitch: 1.25, rate: 1.0 }
+    },
+    vaporwave: {
+        timescale: { speed: 0.85, pitch: 0.80, rate: 1.0 }
+    },
+    karaoke: {
+        karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 }
+    },
+    treble_boost: {
+        equalizer: [
+            { band: 10, gain: 0.20 },
+            { band: 11, gain: 0.25 },
+            { band: 12, gain: 0.30 },
+            { band: 13, gain: 0.35 }
+        ]
+    },
+    pop: {
+        equalizer: [
+            { band: 0, gain: -0.05 },
+            { band: 1, gain: 0.10 },
+            { band: 2, gain: 0.15 },
+            { band: 3, gain: 0.12 },
+            { band: 4, gain: 0.05 }
+        ]
+    },
+    rock: {
+        equalizer: [
+            { band: 0, gain: 0.15 },
+            { band: 1, gain: 0.10 },
+            { band: 2, gain: -0.08 },
+            { band: 3, gain: -0.10 },
+            { band: 4, gain: 0.05 },
+            { band: 10, gain: 0.10 },
+            { band: 12, gain: 0.15 }
+        ]
+    }
 };
 
 /**
- * Per-Guild Music Subscription & Queue Manager with DSP Audio Filters
+ * Per-Guild Music Subscription & Queue Manager backed by Lavalink
  */
 class GuildMusicQueue {
     constructor(guildId) {
@@ -48,38 +84,49 @@ class GuildMusicQueue {
         this.voiceChannelId = null;
         this.voiceChannelName = 'None';
         this.textChannel = null;
-        this.connection = null;
-        this.player = createAudioPlayer();
+        this.player = null; // Shoukaku Player instance
         this.queue = [];
         this.history = [];
         this.currentTrack = null;
         this.volume = 100;
-        this.currentResource = null;
         this.loopMode = 'off'; // 'off' | 'track' | 'queue'
         this.isPlaying = false;
         this.disconnectTimeout = null;
 
         // DSP Filter States
         this.speed = 1.0;
-        this.activeFilter = 'none'; // 'none' | 'nightcore' | 'vaporwave' | 'bassboost_medium' | 'spatial_8d' | 'karaoke' | etc.
+        this.activeFilter = 'none';
         this.playbackStartTime = 0;
         this.pausedAt = 0;
 
-        // Current Track Synced Lyrics
+        // Synced Lyrics & Sleep Timer
         this.currentLyrics = null;
-
-        // Sleep timer & Skip Votes
         this.sleepTimeout = null;
         this.sleepEndsAt = null;
         this.skipVotes = new Set();
-
-        this.setupPlayerListeners();
     }
 
     setupPlayerListeners() {
-        this.player.on(AudioPlayerStatus.Idle, () => {
+        if (!this.player) return;
+
+        this.player.on('start', () => {
+            this.isPlaying = true;
+            this.playbackStartTime = Date.now();
+            musicManager.updateDiscordPresence(this.currentTrack ? this.currentTrack.title : null);
+
+            if (this.textChannel && this.currentTrack) {
+                const { buildNowPlayingEmbed, buildMusicControlRow } = require('./musicUtils');
+                const embed = buildNowPlayingEmbed(this.currentTrack, this);
+                const row = buildMusicControlRow(this);
+                this.textChannel.send({ embeds: [embed], components: [row] }).catch(() => {});
+            }
+        });
+
+        this.player.on('end', async (reason) => {
+            // reason can be 'finished', 'replaced', 'stopped', etc.
+            if (reason && reason.type === 'replaced') return;
+
             if (this.currentTrack) {
-                // Record in history for analytics
                 this.history.unshift({
                     ...this.currentTrack,
                     playedAt: new Date().toISOString()
@@ -87,7 +134,7 @@ class GuildMusicQueue {
                 if (this.history.length > 50) this.history.pop();
 
                 if (this.loopMode === 'track') {
-                    this.playTrack(this.currentTrack);
+                    await this.playTrack(this.currentTrack);
                     return;
                 } else if (this.loopMode === 'queue') {
                     this.queue.push(this.currentTrack);
@@ -95,12 +142,11 @@ class GuildMusicQueue {
             }
 
             this.currentTrack = null;
-            this.currentResource = null;
             this.currentLyrics = null;
 
             if (this.queue.length > 0) {
                 const nextTrack = this.queue.shift();
-                this.playTrack(nextTrack);
+                await this.playTrack(nextTrack);
             } else {
                 this.isPlaying = false;
                 musicManager.updateDiscordPresence();
@@ -108,10 +154,10 @@ class GuildMusicQueue {
             }
         });
 
-        this.player.on('error', error => {
-            console.error(`[MUSIC ERROR in Guild ${this.guildId}]`, error.message);
+        this.player.on('error', (err) => {
+            console.error(`[LAVALINK PLAYER ERROR Guild ${this.guildId}]`, err);
             if (this.textChannel) {
-                this.textChannel.send(`⚠️ **Playback Error:** (${error.message}). Skipping to next track...`).catch(() => {});
+                this.textChannel.send(`⚠️ **Playback Issue:** Track encountered an issue. Skipping...`).catch(() => {});
             }
             if (this.queue.length > 0) {
                 const nextTrack = this.queue.shift();
@@ -123,13 +169,17 @@ class GuildMusicQueue {
                 this.scheduleDisconnect();
             }
         });
+
+        this.player.on('closed', () => {
+            this.isPlaying = false;
+        });
     }
 
     scheduleDisconnect() {
         if (this.disconnectTimeout) clearTimeout(this.disconnectTimeout);
-        this.disconnectTimeout = setTimeout(() => {
+        this.disconnectTimeout = setTimeout(async () => {
             if (!this.isPlaying && this.queue.length === 0) {
-                this.destroy();
+                await this.destroy();
                 if (this.textChannel) {
                     this.textChannel.send('👋 Left voice channel due to inactivity. Thanks for listening!').catch(() => {});
                 }
@@ -144,56 +194,27 @@ class GuildMusicQueue {
         }
     }
 
-    connect(voiceChannel, textChannel) {
+    async connect(voiceChannel, textChannel) {
         this.cancelDisconnect();
         this.textChannel = textChannel;
         this.voiceChannelId = voiceChannel.id;
         this.voiceChannelName = voiceChannel.name;
 
-        if (!this.connection || this.connection.state.status === VoiceConnectionStatus.Destroyed) {
-            this.connection = joinVoiceChannel({
-                channelId: voiceChannel.id,
+        if (!musicManager.shoukaku) {
+            throw new Error('Lavalink audio client is not initialized or still connecting.');
+        }
+
+        if (!this.player) {
+            this.player = await musicManager.shoukaku.joinVoiceChannel({
                 guildId: this.guildId,
-                adapterCreator: voiceChannel.guild.voiceAdapterCreator
+                channelId: voiceChannel.id,
+                shardId: voiceChannel.guild.shardId || 0,
+                deaf: true
             });
-
-            this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
-                try {
-                    await Promise.race([
-                        entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
-                        entersState(this.connection, VoiceConnectionStatus.Connecting, 5000)
-                    ]);
-                } catch {
-                    this.destroy();
-                }
-            });
-
-            this.connection.subscribe(this.player);
+            this.setupPlayerListeners();
         }
 
-        return this.connection;
-    }
-
-    /**
-     * Builds the active FFmpeg audio filter string based on speed, presets, and DSP settings
-     */
-    buildFilterString() {
-        const filters = [];
-
-        // 1. Preset Filters
-        if (this.activeFilter && DSP_PRESETS[this.activeFilter]) {
-            filters.push(DSP_PRESETS[this.activeFilter]);
-        }
-
-        // 2. Custom Speed / Pitch (if not using nightcore or vaporwave presets which set rate themselves)
-        if (this.activeFilter !== 'nightcore' && this.activeFilter !== 'vaporwave') {
-            if (this.speed && this.speed !== 1.0) {
-                const clamped = Math.max(0.5, Math.min(2.0, this.speed));
-                filters.push(`atempo=${clamped}`);
-            }
-        }
-
-        return filters.length > 0 ? filters.join(',') : null;
+        return this.player;
     }
 
     async playTrack(track, seekSeconds = 0) {
@@ -208,62 +229,19 @@ class GuildMusicQueue {
         }).catch(() => {});
 
         try {
-            let rawStream;
-            try {
-                const info = await yt.getInfo(track.url);
-                rawStream = yt.download(info, {
-                    quality: Quality.HighestAudio,
-                    filter: { hasAudio: true, hasVideo: false },
-                    highWaterMark: 1 << 25
-                });
-            } catch (dlErr) {
-                console.warn(`[PLAY TRACK WARN] yt.getInfo/download error (${dlErr.message}), falling back to direct video ID stream...`);
-                rawStream = yt.download(track.url, {
-                    quality: Quality.HighestAudio,
-                    filter: { hasAudio: true, hasVideo: false },
-                    highWaterMark: 1 << 25
-                });
+            if (!this.player) {
+                throw new Error('Voice player is not connected.');
             }
 
-            const filterStr = this.buildFilterString();
-            let finalStream = rawStream;
-
-            if (filterStr) {
-                const transcoder = new prism.FFmpeg({
-                    args: [
-                        '-analyzeduration', '0',
-                        '-loglevel', '0',
-                        '-i', 'pipe:0',
-                        '-af', filterStr,
-                        '-f', 's16le',
-                        '-ar', '48000',
-                        '-ac', '2'
-                    ]
-                });
-                finalStream = rawStream.pipe(transcoder);
-            }
-
-            const resource = createAudioResource(finalStream, {
-                inputType: filterStr ? StreamType.Raw : StreamType.Arbitrary,
-                inlineVolume: true
+            // Play track via Lavalink
+            await this.player.playTrack({
+                track: { encoded: track.encoded },
+                position: seekSeconds * 1000
             });
 
-            if (resource.volume) {
-                resource.volume.setVolume(this.volume / 100);
-            }
-
-            this.currentResource = resource;
-            this.player.play(resource);
-
-            musicManager.updateDiscordPresence(track.title);
-
-            // Announce in text channel
-            if (this.textChannel) {
-                const { buildNowPlayingEmbed, buildMusicControlRow } = require('./musicUtils');
-                const embed = buildNowPlayingEmbed(track, this);
-                const row = buildMusicControlRow(this);
-                this.textChannel.send({ embeds: [embed], components: [row] }).catch(() => {});
-            }
+            // Re-apply volume & filters
+            await this.player.setGlobalVolume(this.volume);
+            await this.applyFilter(this.activeFilter, this.speed, false);
         } catch (err) {
             console.error('[PLAY TRACK ERROR]', err);
             if (this.textChannel) {
@@ -271,7 +249,7 @@ class GuildMusicQueue {
             }
             if (this.queue.length > 0) {
                 const nextTrack = this.queue.shift();
-                this.playTrack(nextTrack);
+                await this.playTrack(nextTrack);
             } else {
                 this.isPlaying = false;
                 musicManager.updateDiscordPresence();
@@ -280,60 +258,83 @@ class GuildMusicQueue {
         }
     }
 
-    /**
-     * Re-applies active filter or speed without skipping track
-     */
-    async applyFilter(filterName, customSpeed = null) {
+    async applyFilter(filterName, customSpeed = null, reseek = true) {
         if (filterName !== undefined) this.activeFilter = filterName;
         if (customSpeed !== null) this.speed = customSpeed;
 
-        if (this.currentTrack) {
-            const elapsed = this.getPlaybackSeconds();
-            await this.playTrack(this.currentTrack, elapsed);
+        if (!this.player) return;
+
+        const filters = {};
+        if (this.activeFilter && LAVALINK_PRESETS[this.activeFilter]) {
+            Object.assign(filters, LAVALINK_PRESETS[this.activeFilter]);
+        }
+
+        if (this.speed && this.speed !== 1.0 && this.activeFilter !== 'nightcore' && this.activeFilter !== 'vaporwave') {
+            const clamped = Math.max(0.5, Math.min(2.0, this.speed));
+            filters.timescale = { speed: clamped, pitch: 1.0, rate: 1.0 };
+        }
+
+        try {
+            await this.player.setFilters(filters);
+        } catch (fErr) {
+            console.warn('[LAVALINK FILTER WARN]', fErr.message);
         }
     }
 
     getPlaybackSeconds() {
         if (!this.isPlaying || !this.playbackStartTime) return 0;
-        if (this.player.state.status === 'paused') {
+        if (this.player && this.player.position) {
+            return Math.floor(this.player.position / 1000);
+        }
+        if (this.pausedAt) {
             return Math.floor((this.pausedAt - this.playbackStartTime) / 1000);
         }
         return Math.floor((Date.now() - this.playbackStartTime) / 1000);
     }
 
-    setVolume(val) {
+    async setVolume(val) {
         this.volume = Math.max(1, Math.min(200, val));
-        if (this.currentResource && this.currentResource.volume) {
-            this.currentResource.volume.setVolume(this.volume / 100);
+        if (this.player) {
+            await this.player.setGlobalVolume(this.volume).catch(() => {});
         }
         return this.volume;
     }
 
-    pause() {
+    async pause() {
         this.pausedAt = Date.now();
-        return this.player.pause();
+        if (this.player) {
+            await this.player.setPaused(true).catch(() => {});
+        }
+        return true;
     }
 
-    resume() {
+    async resume() {
         if (this.pausedAt && this.playbackStartTime) {
             this.playbackStartTime += (Date.now() - this.pausedAt);
         }
-        return this.player.unpause();
+        if (this.player) {
+            await this.player.setPaused(false).catch(() => {});
+        }
+        return true;
     }
 
-    skip() {
+    async skip() {
         if (!this.currentTrack) return null;
         const skipped = this.currentTrack;
-        this.player.stop();
+        if (this.player) {
+            await this.player.stopTrack().catch(() => {});
+        }
         return skipped;
     }
 
-    stop() {
+    async stop() {
         this.queue = [];
         this.currentTrack = null;
         this.currentLyrics = null;
-        this.player.stop(true);
         this.isPlaying = false;
+        if (this.player) {
+            await this.player.stopTrack().catch(() => {});
+        }
         musicManager.updateDiscordPresence();
         this.scheduleDisconnect();
     }
@@ -359,12 +360,12 @@ class GuildMusicQueue {
         }
 
         this.sleepEndsAt = Date.now() + (minutes * 60 * 1000);
-        this.sleepTimeout = setTimeout(() => {
+        this.sleepTimeout = setTimeout(async () => {
             if (textChannel) {
                 textChannel.send('😴 **Sleep Timer Ended:** Music playback stopped and disconnected. Goodnight!').catch(() => {});
             }
-            this.stop();
-            this.destroy();
+            await this.stop();
+            await this.destroy();
         }, minutes * 60 * 1000);
         return true;
     }
@@ -379,7 +380,7 @@ class GuildMusicQueue {
         return false;
     }
 
-    destroy() {
+    async destroy() {
         this.cancelSleepTimer();
         this.cancelDisconnect();
         this.queue = [];
@@ -387,28 +388,62 @@ class GuildMusicQueue {
         this.currentLyrics = null;
         this.isPlaying = false;
         musicManager.updateDiscordPresence();
-        try {
-            this.player.stop(true);
-        } catch (_) {}
-        if (this.connection) {
+        if (musicManager.shoukaku && this.player) {
             try {
-                this.connection.destroy();
+                await musicManager.shoukaku.leaveVoiceChannel(this.guildId);
             } catch (_) {}
-            this.connection = null;
+            this.player = null;
         }
         musicManager.queues.delete(this.guildId);
     }
 }
 
 /**
- * Global Music Manager
+ * Global Music Manager backed by Shoukaku v4
  */
 const musicManager = {
     queues: new Map(),
     clientRef: null,
+    shoukaku: null,
 
     init(client) {
         this.clientRef = client;
+
+        const nodes = config.lavalinkNodes || [
+            {
+                name: 'Serenetia-SSL',
+                url: 'lavalinkv4.serenetia.com:443',
+                auth: 'https://dsc.gg/ajidevserver',
+                secure: true
+            }
+        ];
+
+        this.shoukaku = new Shoukaku(
+            new Connectors.DiscordJS(client),
+            nodes,
+            {
+                moveOnDisconnect: false,
+                resume: false,
+                reconnectTries: 10,
+                reconnectInterval: 5
+            }
+        );
+
+        this.shoukaku.on('ready', (name) => {
+            console.log(`🎵 [LAVALINK] Node "${name}" connected and ready!`);
+        });
+
+        this.shoukaku.on('error', (name, error) => {
+            console.warn(`⚠️ [LAVALINK] Node "${name}" encountered an error:`, error.message || error);
+        });
+
+        this.shoukaku.on('close', (name, code, reason) => {
+            console.warn(`[LAVALINK] Node "${name}" closed (code ${code}): ${reason || 'No reason'}`);
+        });
+
+        this.shoukaku.on('disconnect', (name, count) => {
+            console.warn(`[LAVALINK] Node "${name}" disconnected. Reconnect attempt ${count}...`);
+        });
     },
 
     updateDiscordPresence(trackTitle = null) {
@@ -431,115 +466,42 @@ const musicManager = {
     },
 
     deleteQueue(guildId) {
-        const q = this.queues.get(guildId);
-        if (q) q.destroy();
+        if (this.queues.has(guildId)) {
+            const q = this.queues.get(guildId);
+            q.destroy();
+            this.queues.delete(guildId);
+        }
     },
 
-    async resolveQuery(query, requester) {
-        let cleanQuery = query.trim();
+    /**
+     * Resolves queries using Lavalink REST with graceful fallback to yt-search
+     */
+    async resolveQuery(rawQuery, requester) {
+        let cleanQuery = rawQuery.trim();
 
-        // 0. Spotify, Apple Music, and SoundCloud URL Auto-Conversion
-        if (cleanQuery.includes('open.spotify.com/')) {
-            try {
-                const https = require('https');
-                const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(cleanQuery)}`;
-                const spData = await new Promise(resolve => {
-                    https.get(oembedUrl, { headers: { 'User-Agent': 'GrandwayMusic/2.0' } }, res => {
-                        let d = '';
-                        res.on('data', c => d += c);
-                        res.on('end', () => {
-                            try { resolve(JSON.parse(d)); } catch (_) { resolve(null); }
-                        });
-                    }).on('error', () => resolve(null));
-                });
-                if (spData && spData.title) {
-                    cleanQuery = spData.title;
-                }
-            } catch (_) {}
-        } else if (cleanQuery.includes('soundcloud.com/')) {
-            try {
-                const u = new URL(cleanQuery);
-                const parts = u.pathname.split('/').filter(Boolean);
-                if (parts.length >= 2) {
-                    const artist = parts[0].replace(/-/g, ' ');
-                    const track = parts[1].replace(/-/g, ' ');
-                    cleanQuery = `${track} ${artist}`;
-                }
-            } catch (_) {}
-        } else if (cleanQuery.includes('music.apple.com/')) {
-            try {
-                const u = new URL(cleanQuery);
-                const parts = u.pathname.split('/').filter(Boolean);
-                const albumIdx = parts.indexOf('album');
-                if (albumIdx !== -1 && parts[albumIdx + 1]) {
-                    cleanQuery = parts[albumIdx + 1].replace(/-/g, ' ');
-                }
-            } catch (_) {}
-        }
+        // Node check
+        const node = this.shoukaku ? (this.shoukaku.getNode ? this.shoukaku.getNode() : this.shoukaku.options.nodeResolver(this.shoukaku.nodes)) : null;
 
-        // 1. YouTube Playlist Detection
-        if (cleanQuery.includes('playlist?list=') || cleanQuery.includes('&list=')) {
+        if (node) {
             try {
-                const playlist = await yt.getPlaylist(cleanQuery);
-                if (playlist && playlist.videos && playlist.videos.length > 0) {
-                    const tracks = playlist.videos.map(v => ({
-                        title: v.title || 'Unknown Title',
-                        url: v.url || `https://www.youtube.com/watch?v=${v.id}`,
-                        duration: v.lengthSeconds ? this.formatSeconds(v.lengthSeconds) : 'Unknown',
-                        seconds: v.lengthSeconds || 0,
-                        author: v.author ? v.author.name : 'Unknown Artist',
-                        thumbnail: (v.thumbnails && v.thumbnails[0]) ? v.thumbnails[0].url : null,
-                        requester: {
-                            id: requester.id,
-                            tag: requester.tag || requester.username,
-                            avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
-                        }
-                    }));
-                    return {
-                        type: 'playlist',
-                        title: playlist.title || 'YouTube Playlist',
-                        tracks
-                    };
+                let identifier = cleanQuery;
+                if (!cleanQuery.startsWith('http://') && !cleanQuery.startsWith('https://')) {
+                    identifier = `ytsearch:${cleanQuery}`;
                 }
-            } catch (pErr) {
-                console.warn('[PLAYLIST PARSE ERROR]', pErr.message);
-            }
-        }
 
-        // 2. Direct Video URL Detection
-        const videoIdMatch = cleanQuery.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
-        if (videoIdMatch) {
-            const videoId = videoIdMatch[1];
-            try {
-                const info = await yt.getInfo(cleanQuery);
-                const track = {
-                    title: info.videoDetails.title,
-                    url: info.videoDetails.video_url || cleanQuery,
-                    duration: this.formatSeconds(info.videoDetails.lengthSeconds),
-                    seconds: parseInt(info.videoDetails.lengthSeconds, 10) || 0,
-                    author: info.videoDetails.author ? info.videoDetails.author.name : 'Unknown Artist',
-                    thumbnail: (info.videoDetails.thumbnails && info.videoDetails.thumbnails.length > 0) 
-                        ? info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url 
-                        : null,
-                    requester: {
-                        id: requester.id,
-                        tag: requester.tag || requester.username,
-                        avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
-                    }
-                };
-                return { type: 'track', track };
-            } catch (vErr) {
-                console.warn(`[YTDL getInfo WARN] Direct info failed (${vErr.message}), falling back to metadata search for ${videoId}...`);
-                try {
-                    const fallback = await yts({ videoId });
-                    if (fallback && fallback.title) {
+                const res = await node.rest.resolve(identifier);
+                if (res) {
+                    if (res.loadType === 'track' && res.data) {
+                        const t = res.data;
+                        const info = t.info || {};
                         const track = {
-                            title: fallback.title,
-                            url: fallback.url || `https://www.youtube.com/watch?v=${videoId}`,
-                            duration: fallback.duration?.timestamp || fallback.timestamp || this.formatSeconds(fallback.seconds || 0),
-                            seconds: fallback.seconds || 0,
-                            author: fallback.author ? fallback.author.name : 'Unknown Artist',
-                            thumbnail: fallback.thumbnail || fallback.image || null,
+                            title: info.title || 'Unknown Title',
+                            url: info.uri || cleanQuery,
+                            duration: this.formatSeconds(Math.floor((info.length || 0) / 1000)),
+                            seconds: Math.floor((info.length || 0) / 1000),
+                            author: info.author || 'Unknown Artist',
+                            thumbnail: info.artworkUrl || `https://img.youtube.com/vi/${info.identifier}/hqdefault.jpg`,
+                            encoded: t.encoded,
                             requester: {
                                 id: requester.id,
                                 tag: requester.tag || requester.username,
@@ -547,21 +509,79 @@ const musicManager = {
                             }
                         };
                         return { type: 'track', track };
+                    } else if (res.loadType === 'playlist' && res.data) {
+                        const playlistData = res.data;
+                        const tracks = (playlistData.tracks || []).map(t => {
+                            const info = t.info || {};
+                            return {
+                                title: info.title || 'Unknown Title',
+                                url: info.uri || `https://www.youtube.com/watch?v=${info.identifier}`,
+                                duration: this.formatSeconds(Math.floor((info.length || 0) / 1000)),
+                                seconds: Math.floor((info.length || 0) / 1000),
+                                author: info.author || 'Unknown Artist',
+                                thumbnail: info.artworkUrl || `https://img.youtube.com/vi/${info.identifier}/hqdefault.jpg`,
+                                encoded: t.encoded,
+                                requester: {
+                                    id: requester.id,
+                                    tag: requester.tag || requester.username,
+                                    avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+                                }
+                            };
+                        });
+                        return {
+                            type: 'playlist',
+                            title: (playlistData.info && playlistData.info.name) || 'Playlist',
+                            tracks
+                        };
+                    } else if (res.loadType === 'search' && res.data && res.data.length > 0) {
+                        const topTracks = res.data.slice(0, 5).map(t => {
+                            const info = t.info || {};
+                            return {
+                                title: info.title || 'Unknown Title',
+                                url: info.uri || `https://www.youtube.com/watch?v=${info.identifier}`,
+                                duration: this.formatSeconds(Math.floor((info.length || 0) / 1000)),
+                                seconds: Math.floor((info.length || 0) / 1000),
+                                author: info.author || 'Unknown Artist',
+                                thumbnail: info.artworkUrl || `https://img.youtube.com/vi/${info.identifier}/hqdefault.jpg`,
+                                encoded: t.encoded,
+                                requester: {
+                                    id: requester.id,
+                                    tag: requester.tag || requester.username,
+                                    avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+                                }
+                            };
+                        });
+                        return {
+                            type: 'search',
+                            results: topTracks,
+                            topTrack: topTracks[0]
+                        };
                     }
-                } catch (fallbackErr) {
-                    console.error('[YTS FALLBACK ERROR]', fallbackErr.message);
                 }
-                throw new Error(`Could not fetch YouTube video details: ${vErr.message}`);
+            } catch (lavalinkErr) {
+                console.warn('[LAVALINK RESOLVE WARN]', lavalinkErr.message);
             }
         }
 
-        // 3. YouTube Keyword Search (yt-search)
+        // Fallback: yt-search + Lavalink encode
         const searchResult = await yts(cleanQuery);
         if (!searchResult || !searchResult.videos || searchResult.videos.length === 0) {
             return { type: 'empty' };
         }
 
-        const topVideos = searchResult.videos.slice(0, 5).map(v => ({
+        // Attempt resolving first video via Lavalink if node is available
+        const firstVid = searchResult.videos[0];
+        let encodedTrack = null;
+        if (node) {
+            try {
+                const check = await node.rest.resolve(firstVid.url);
+                if (check && check.data) {
+                    encodedTrack = Array.isArray(check.data) ? check.data[0]?.encoded : (check.data.encoded || check.data.tracks?.[0]?.encoded);
+                }
+            } catch (_) {}
+        }
+
+        const topVideos = searchResult.videos.slice(0, 5).map((v, idx) => ({
             title: v.title,
             url: v.url,
             duration: v.timestamp || this.formatSeconds(v.seconds),
@@ -569,6 +589,7 @@ const musicManager = {
             author: v.author ? v.author.name : 'Unknown Artist',
             thumbnail: v.thumbnail || null,
             views: v.views ? v.views.toLocaleString() : 'N/A',
+            encoded: idx === 0 ? encodedTrack : null,
             requester: {
                 id: requester.id,
                 tag: requester.tag || requester.username,
@@ -592,4 +613,4 @@ const musicManager = {
 };
 
 module.exports = musicManager;
-module.exports.DSP_PRESETS = DSP_PRESETS;
+module.exports.LAVALINK_PRESETS = LAVALINK_PRESETS;

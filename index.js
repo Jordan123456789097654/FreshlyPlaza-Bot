@@ -172,6 +172,14 @@ client.once('clientReady', async () => {
     // Initialize full server audit logger
     setupAuditLogger(client);
 
+    // Initialize Lavalink Music Manager
+    try {
+        const musicManager = require('./utils/musicManager');
+        musicManager.init(client);
+    } catch (mErr) {
+        console.warn('⚠️ [MUSIC] Could not initialize Lavalink musicManager:', mErr.message);
+    }
+
     await initDatabase();
 
     // Auto-sync / deploy slash commands with Discord API on startup

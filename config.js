@@ -132,5 +132,27 @@ module.exports = {
     // Exempt Users (ignored from inactive checks / termination sweeps)
     ignoredUserIds: [
         '1468030071242625098' // SECRET_DEVJED
+    ],
+
+    // Lavalink Nodes (Shoukaku v4 for ultra low RAM audio streaming)
+    lavalinkNodes: [
+        {
+            name: 'Serenetia-SSL',
+            url: 'lavalinkv4.serenetia.com:443',
+            auth: 'https://dsc.gg/ajidevserver',
+            secure: true
+        },
+        {
+            name: 'Trinium-SSL',
+            url: 'lavalink-v4.triniumhost.com:443',
+            auth: 'free',
+            secure: true
+        },
+        {
+            name: 'Jirayu-SSL',
+            url: 'lavalink.jirayu.net:443',
+            auth: 'youshallnotpass',
+            secure: true
+        }
     ]
 };
