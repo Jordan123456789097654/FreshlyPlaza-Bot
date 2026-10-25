@@ -16,7 +16,7 @@ function escapeHtml(str) {
 function renderMusicDashboard(queue, voiceChannels = []) {
     const isPlaying = queue && queue.isPlaying && queue.currentTrack;
     const currentTrack = isPlaying ? queue.currentTrack : null;
-    const isPaused = queue ? queue.player.state.status === 'paused' : false;
+    const isPaused = queue && queue.player ? (queue.player.paused || (queue.player.state && queue.player.state.status === 'paused')) : false;
 
     const trackTitle = currentTrack ? escapeHtml(currentTrack.title) : 'Nothing Playing';
     const trackAuthor = currentTrack ? escapeHtml(currentTrack.author || 'Unknown') : 'Select a song or paste a YouTube URL below';
