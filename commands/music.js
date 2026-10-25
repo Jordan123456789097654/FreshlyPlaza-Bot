@@ -568,12 +568,52 @@ module.exports = [
                             .setMaxValue(360)
                             .setRequired(true)
                     )
+            )
+            .addSubcommand(sub =>
+                sub.setName('filter')
+                    .setDescription('Apply a live DSP audio effect (8D Ping-Pong, Nightcore, Bass Boost, Lo-Fi, etc.)')
+                    .addStringOption(opt =>
+                        opt.setName('preset')
+                            .setDescription('Select an audio preset')
+                            .setRequired(true)
+                            .addChoices(
+                                { name: '🧼 Clean (No Filter)', value: 'none' },
+                                { name: '🎧 8D Surround Ping-Pong', value: '8d' },
+                                { name: '🏓 Fast Ping-Pong', value: 'pingpong_fast' },
+                                { name: '📻 Lo-Fi Radio', value: 'lofi' },
+                                { name: '✨ Nightcore', value: 'nightcore' },
+                                { name: '🌊 Vaporwave', value: 'vaporwave' },
+                                { name: '〰️ Tremolo Pulse Wave', value: 'tremolo' },
+                                { name: '🎤 Karaoke', value: 'karaoke' },
+                                { name: '🔈 Bass Boost (Low)', value: 'bassboost_low' },
+                                { name: '🔊 Bass Boost (Medium)', value: 'bassboost_medium' },
+                                { name: '💥 Bass Boost (Extreme)', value: 'bassboost_extreme' },
+                                { name: '🎻 Treble Boost', value: 'treble_boost' },
+                                { name: '🎸 Pop', value: 'pop' },
+                                { name: '🤘 Rock', value: 'rock' }
+                            )
+                    )
             ),
         async execute(interaction) {
             const sub = interaction.options.getSubcommand();
             const db = getDb();
             const member = interaction.member;
             const isManager = member.permissions.has('ManageGuild') || member.permissions.has('Administrator');
+
+            if (sub === 'filter') {
+                const isAuthorized = await isDjAuthorized(interaction.member, interaction.guild.id);
+                if (!isAuthorized) {
+                    return interaction.reply({ content: '❌ You must have the DJ role to change audio filters.', flags: MessageFlags.Ephemeral });
+                }
+                const preset = interaction.options.getString('preset');
+                const queue = musicManager.getQueue(interaction.guild.id);
+                await queue.applyFilter(preset);
+                return interaction.reply({
+                    content: preset === 'none'
+                        ? '🧼 Cleared all DSP audio filters (Clean audio restored).'
+                        : `🎛️ Applied **${preset.toUpperCase()}** DSP audio effect!`
+                });
+            }
 
             if (sub === 'role') {
                 if (!isManager) {

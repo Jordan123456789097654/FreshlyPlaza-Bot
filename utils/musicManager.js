@@ -72,6 +72,34 @@ const LAVALINK_PRESETS = {
             { band: 10, gain: 0.10 },
             { band: 12, gain: 0.15 }
         ]
+    },
+    '8d': {
+        rotation: { rotationHz: 0.25 },
+        equalizer: [
+            { band: 0, gain: 0.12 },
+            { band: 1, gain: 0.08 }
+        ]
+    },
+    pingpong_fast: {
+        rotation: { rotationHz: 0.55 },
+        equalizer: [
+            { band: 0, gain: 0.12 },
+            { band: 1, gain: 0.08 }
+        ]
+    },
+    lofi: {
+        lowPass: { smoothing: 18.0 },
+        timescale: { speed: 0.94, pitch: 0.95, rate: 1.0 },
+        equalizer: [
+            { band: 0, gain: 0.15 },
+            { band: 1, gain: 0.10 },
+            { band: 11, gain: -0.20 },
+            { band: 12, gain: -0.25 }
+        ]
+    },
+    tremolo: {
+        tremolo: { frequency: 4.0, depth: 0.65 },
+        vibrato: { frequency: 4.0, depth: 0.4 }
     }
 };
 
@@ -427,13 +455,42 @@ class GuildMusicQueue {
             Object.assign(filters, LAVALINK_PRESETS[this.activeFilter]);
         }
 
-        if (this.speed && this.speed !== 1.0 && this.activeFilter !== 'nightcore' && this.activeFilter !== 'vaporwave') {
+        if (this.speed && this.speed !== 1.0 && this.activeFilter !== 'nightcore' && this.activeFilter !== 'vaporwave' && this.activeFilter !== 'lofi') {
             const clamped = Math.max(0.5, Math.min(2.0, this.speed));
             filters.timescale = { speed: clamped, pitch: 1.0, rate: 1.0 };
         }
 
         try {
-            await this.player.setFilters(filters);
+            if (Object.keys(filters).length === 0) {
+                if (typeof this.player.clearFilters === 'function') {
+                    await this.player.clearFilters();
+                } else {
+                    await this.player.setFilters({
+                        equalizer: [],
+                        karaoke: null,
+                        timescale: null,
+                        tremolo: null,
+                        vibrato: null,
+                        rotation: null,
+                        distortion: null,
+                        channelMix: null,
+                        lowPass: null
+                    });
+                }
+            } else {
+                // Explicitly null out inactive filter groups so switching from 8D -> Bass Boost stops 8D rotation
+                await this.player.setFilters({
+                    equalizer: filters.equalizer || [],
+                    karaoke: filters.karaoke || null,
+                    timescale: filters.timescale || null,
+                    tremolo: filters.tremolo || null,
+                    vibrato: filters.vibrato || null,
+                    rotation: filters.rotation || null,
+                    distortion: filters.distortion || null,
+                    channelMix: filters.channelMix || null,
+                    lowPass: filters.lowPass || null
+                });
+            }
         } catch (fErr) {
             console.warn('[LAVALINK FILTER WARN]', fErr.message);
         }

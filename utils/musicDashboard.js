@@ -186,9 +186,11 @@ h3 { font-size: 15px; font-weight: 800; }
 <script>
 (function () {
     var PRESETS = [
-        ['none', 'Clean'], ['nightcore', '✨ Nightcore'], ['vaporwave', '🌊 Vaporwave'],
-        ['karaoke', '🎤 Karaoke'], ['bassboost_low', '🔈 Bass low'], ['bassboost_medium', '🔊 Bass boost'],
-        ['bassboost_extreme', '💥 Extreme bass'], ['treble_boost', '🎻 Treble'], ['pop', '🎸 Pop'], ['rock', '🤘 Rock']
+        ['none', 'Clean'], ['8d', '🎧 8D Ping-Pong'], ['pingpong_fast', '🏓 Fast Ping-Pong'],
+        ['lofi', '📻 Lo-Fi Radio'], ['nightcore', '✨ Nightcore'], ['vaporwave', '🌊 Vaporwave'],
+        ['tremolo', '〰️ Pulse Wave'], ['karaoke', '🎤 Karaoke'], ['bassboost_low', '🔈 Bass low'],
+        ['bassboost_medium', '🔊 Bass boost'], ['bassboost_extreme', '💥 Extreme bass'],
+        ['treble_boost', '🎻 Treble'], ['pop', '🎸 Pop'], ['rock', '🤘 Rock']
     ];
     var LOOP_ICON = { off: '➡️', track: '🔂', queue: '🔁' };
     var THEMES = ['bars', 'circle', 'pulse'];
