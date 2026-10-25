@@ -212,36 +212,45 @@ class GuildMusicQueue {
             const finishedTrack = this.currentTrack;
             this.skipVotes.clear();
 
-            // Automatic recovery if the node failed to decode the track stream (e.g. YouTube cipher/IP block on this node)
+            // Automatic recovery if the node failed to decode the track stream
             if (reason === 'loadFailed' && finishedTrack) {
                 const decodeAttempt = (finishedTrack._decodeRetries || 0) + 1;
                 finishedTrack._decodeRetries = decodeAttempt;
                 finishedTrack.encoded = null;
                 finishedTrack.encodedNode = null;
 
-                // Attempt 1: Re-encode using SoundCloud stream on the current node
+                // Attempt 1: Re-encode using YouTube Music stream on the current node
                 if (decodeAttempt === 1) {
-                    console.warn(`[LAVALINK RECOVERY] Track "${finishedTrack.title}" failed to decode on "${this.player?.node?.name}". Retrying with SoundCloud audio stream...`);
+                    console.warn(`[LAVALINK RECOVERY] Track "${finishedTrack.title}" failed to decode on "${this.player?.node?.name}". Retrying with YouTube Music stream...`);
                     finishedTrack._preferAltSource = true;
-                    finishedTrack._forcePrefix = 'scsearch:';
+                    finishedTrack._forcePrefix = 'ytmsearch:';
                     this._suppressNextStartEmbed = true;
                     await this.playTrack(finishedTrack, 0, 0);
                     return;
                 }
 
-                // Attempt 2: Re-encode using Deezer / Apple Music / Spotify stream on the current node
+                // Attempt 2: Re-encode using Apple Music / Spotify stream on the current node
                 if (decodeAttempt === 2) {
-                    console.warn(`[LAVALINK RECOVERY] Track "${finishedTrack.title}" failed on Attempt 1. Retrying with Deezer/Spotify mirror stream...`);
+                    console.warn(`[LAVALINK RECOVERY] Track "${finishedTrack.title}" failed on Attempt 1. Retrying with Apple Music / Spotify mirror stream...`);
                     finishedTrack._preferAltSource = true;
-                    finishedTrack._forcePrefix = 'dzsearch:';
+                    finishedTrack._forcePrefix = 'amsearch:';
                     this._suppressNextStartEmbed = true;
                     await this.playTrack(finishedTrack, 0, 0);
                     return;
                 }
 
-                // Attempt 3: Only fail over to another node if a DIFFERENT healthy connected node actually exists!
-                // Never call leaveVoiceChannel if current node is the only connected node (prevents Code 4022 Call Terminated).
-                if (decodeAttempt === 3 && this.voiceChannel && musicManager.shoukaku) {
+                // Attempt 3: Re-encode using standard YouTube search stream on the current node
+                if (decodeAttempt === 3) {
+                    console.warn(`[LAVALINK RECOVERY] Track "${finishedTrack.title}" failed on Attempt 2. Retrying with alternate YouTube stream...`);
+                    finishedTrack._preferAltSource = true;
+                    finishedTrack._forcePrefix = 'ytsearch:';
+                    this._suppressNextStartEmbed = true;
+                    await this.playTrack(finishedTrack, 0, 0);
+                    return;
+                }
+
+                // Attempt 4: Only fail over to another node if a DIFFERENT healthy connected node actually exists!
+                if (decodeAttempt === 4 && this.voiceChannel && musicManager.shoukaku) {
                     const badNodeName = this.player && this.player.node ? this.player.node.name : null;
                     const otherNodes = musicManager.getHealthyNodes().filter(n => n.name !== badNodeName);
                     if (otherNodes.length > 0) {
@@ -478,14 +487,13 @@ class GuildMusicQueue {
                     queriesToTry.push(track.url);
                 }
                 if (searchStr) {
-                    // Always prefer SoundCloud / Deezer / Apple Music / Spotify streams over direct YouTube video streams,
-                    // because public Lavalink nodes frequently get HTTP 403 /cipher errors on YouTube googlevideo CDNs.
-                    if (!queriesToTry.includes(`scsearch:${searchStr}`)) queriesToTry.push(`scsearch:${searchStr}`);
-                    if (!queriesToTry.includes(`dzsearch:${searchStr}`)) queriesToTry.push(`dzsearch:${searchStr}`);
+                    // Prioritize Spotify (LavaSrc), YouTube Music, and Apple Music first (100% playable streams on MilloHost),
+                    // keeping SoundCloud last because SoundCloud API changes cause "SoundCloud track has no playable stream format" on older Lavaplayer builds.
                     if (!queriesToTry.includes(`spsearch:${searchStr}`)) queriesToTry.push(`spsearch:${searchStr}`);
-                    if (!queriesToTry.includes(`amsearch:${searchStr}`)) queriesToTry.push(`amsearch:${searchStr}`);
                     if (!queriesToTry.includes(`ytmsearch:${searchStr}`)) queriesToTry.push(`ytmsearch:${searchStr}`);
+                    if (!queriesToTry.includes(`amsearch:${searchStr}`)) queriesToTry.push(`amsearch:${searchStr}`);
                     if (!queriesToTry.includes(`ytsearch:${searchStr}`)) queriesToTry.push(`ytsearch:${searchStr}`);
+                    if (!queriesToTry.includes(`scsearch:${searchStr}`)) queriesToTry.push(`scsearch:${searchStr}`);
                 }
                 if (track.url && (track.url.startsWith('http://') || track.url.startsWith('https://')) && !queriesToTry.includes(track.url)) {
                     queriesToTry.push(track.url);
@@ -1002,12 +1010,13 @@ const musicManager = {
             }
         }
 
-        // 2. Check if query is a YouTube playlist URL
-        if (playlistMatch) {
+        // 2. Check if query is a YouTube playlist URL (not a single watch?v=...&list=RD... mix link)
+        const ytVideoIdMatch = cleanQuery.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        if (playlistMatch && !ytVideoIdMatch) {
             try {
                 const listId = playlistMatch[1];
                 const pResult = await yts({ listId });
-                if (pResult && pResult.videos && pResult.videos.length > 0) {
+                if (pResult && Array.isArray(pResult.videos) && pResult.videos.length > 0) {
                     const tracks = pResult.videos.map(v => ({
                         title: v.title || 'Unknown Title',
                         url: v.url || `https://www.youtube.com/watch?v=${v.videoId}`,
@@ -1029,13 +1038,10 @@ const musicManager = {
                         tracks
                     };
                 }
-            } catch (pErr) {
-                console.warn('[YTS PLAYLIST FALLBACK WARN]', pErr.message);
-            }
+            } catch (_) {}
         }
 
         // 3. If it's a single YouTube video URL (from user paste or web dashboard autocomplete), look up videoId via yt-search
-        const ytVideoIdMatch = cleanQuery.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
         if (ytVideoIdMatch) {
             try {
                 const v = await yts({ videoId: ytVideoIdMatch[1] });
@@ -1088,10 +1094,10 @@ const musicManager = {
             }
         } catch (_) {}
 
-        // 5. Final fallback: resolve directly via Lavalink SoundCloud search
+        // 5. Final fallback: resolve directly via Lavalink Spotify / YouTube Music search
         for (const node of activeNodes) {
             try {
-                const res = await node.rest.resolve(`scsearch:${cleanQuery}`);
+                const res = await node.rest.resolve(`spsearch:${cleanQuery}`);
                 if (res && res.loadType === 'search' && Array.isArray(res.data) && res.data.length > 0) {
                     const topTracks = res.data.slice(0, 5).map(t => {
                         const info = t.info || {};

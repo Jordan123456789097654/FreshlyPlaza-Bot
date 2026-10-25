@@ -141,18 +141,6 @@ module.exports = {
             url: 'lava-v4.millohost.my.id:443',
             auth: 'https://discord.gg/mjS5J2K3ep',
             secure: true
-        },
-        {
-            name: 'Trinium-SSL',
-            url: 'lavalink-v4.triniumhost.com:443',
-            auth: 'free',
-            secure: true
-        },
-        {
-            name: 'Trinium-NodeLink',
-            url: 'nodelink.triniumhost.com:443',
-            auth: 'free',
-            secure: true
         }
     ]
 };
