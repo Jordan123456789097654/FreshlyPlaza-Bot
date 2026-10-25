@@ -469,8 +469,8 @@ const musicManager = {
             {
                 moveOnDisconnect: false,
                 resume: false,
-                reconnectTries: 10,
-                reconnectInterval: 5
+                reconnectTries: 3,
+                reconnectInterval: 30
             }
         );
 

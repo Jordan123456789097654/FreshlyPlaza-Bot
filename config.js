@@ -137,12 +137,6 @@ module.exports = {
     // Lavalink Nodes (Shoukaku v4 for ultra low RAM audio streaming)
     lavalinkNodes: [
         {
-            name: 'Serenetia-SSL',
-            url: 'lavalinkv4.serenetia.com:443',
-            auth: 'https://seretia.link/discord',
-            secure: true
-        },
-        {
             name: 'MilloHost-SSL',
             url: 'lava-v4.millohost.my.id:443',
             auth: 'https://discord.gg/mjS5J2K3ep',
@@ -152,6 +146,12 @@ module.exports = {
             name: 'Trinium-NodeLink',
             url: 'nodelink.triniumhost.com:443',
             auth: 'free',
+            secure: true
+        },
+        {
+            name: 'Nazha-SSL',
+            url: 'lavalink.nazha.online:443',
+            auth: 'nazhafreelava',
             secure: true
         }
     ]
