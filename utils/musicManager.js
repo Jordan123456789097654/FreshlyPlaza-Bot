@@ -178,7 +178,41 @@ class GuildMusicQueue {
             const finishedTrack = this.currentTrack;
             this.skipVotes.clear();
 
+            // Automatic recovery if the node failed to decode the track stream (e.g. YouTube cipher/IP block on this node)
+            if (reason === 'loadFailed' && finishedTrack) {
+                const decodeAttempt = (finishedTrack._decodeRetries || 0) + 1;
+                finishedTrack._decodeRetries = decodeAttempt;
+                finishedTrack.encoded = null;
+                finishedTrack.encodedNode = null;
+
+                // Attempt 1: Re-encode using SoundCloud / Deezer fallback on the current node
+                if (decodeAttempt === 1) {
+                    console.warn(`[LAVALINK RECOVERY] Track "${finishedTrack.title}" failed to decode on "${this.player?.node?.name}". Retrying with SoundCloud/Deezer audio stream...`);
+                    finishedTrack._preferAltSource = true;
+                    this._suppressNextStartEmbed = true;
+                    await this.playTrack(finishedTrack, 0, 0);
+                    return;
+                }
+
+                // Attempt 2: Quarantine current node and fail over to the next healthy node
+                if (decodeAttempt === 2 && this.voiceChannel && musicManager.shoukaku) {
+                    const badNodeName = this.player && this.player.node ? this.player.node.name : null;
+                    console.warn(`[LAVALINK RECOVERY] Node "${badNodeName}" failed to decode "${finishedTrack.title}" twice. Failing over to next node...`);
+                    if (badNodeName) musicManager.markBad(badNodeName, 120000);
+                    try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
+                    this.player = null;
+                    try {
+                        await this.connect(this.voiceChannel, this.textChannel);
+                        this._suppressNextStartEmbed = true;
+                        await this.playTrack(finishedTrack, 0, 1);
+                        return;
+                    } catch (_) {}
+                }
+            }
+
             if (finishedTrack) {
+                delete finishedTrack._decodeRetries;
+                delete finishedTrack._preferAltSource;
                 this.history.unshift({
                     ...finishedTrack,
                     playedAt: new Date().toISOString()
@@ -370,15 +404,30 @@ class GuildMusicQueue {
 
             if (!trackEncoded && this.player.node) {
                 const node = this.player.node;
+                const cleanTitle = String(track.title || '')
+                    .replace(/\(.*?\)|\[.*?\]/g, '')
+                    .replace(/\b(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video)|4k|hd|hq|lyrics?)\b/gi, '')
+                    .trim();
+                const cleanAuthor = String(track.author || '').replace(/\s*-\s*Topic$|VEVO$/gi, '').trim();
+                const searchStr = `${cleanTitle || track.title || ''} ${cleanAuthor}`.trim();
+
                 const queriesToTry = [];
-                if (track.url && (track.url.startsWith('http://') || track.url.startsWith('https://'))) {
-                    queriesToTry.push(track.url);
-                }
-                const searchStr = `${track.title || ''} ${track.author || ''}`.trim();
-                if (searchStr) {
-                    queriesToTry.push(`ytsearch:${searchStr}`);
-                    queriesToTry.push(`ytmsearch:${searchStr}`);
+                if (track._preferAltSource && searchStr) {
+                    // When YouTube decoding fails on a node, prefer SoundCloud / Deezer / Spotify audio streams first
                     queriesToTry.push(`scsearch:${searchStr}`);
+                    queriesToTry.push(`dzsearch:${searchStr}`);
+                    queriesToTry.push(`spsearch:${searchStr}`);
+                    queriesToTry.push(`ytmsearch:${searchStr}`);
+                } else {
+                    if (track.url && (track.url.startsWith('http://') || track.url.startsWith('https://'))) {
+                        queriesToTry.push(track.url);
+                    }
+                    if (searchStr) {
+                        queriesToTry.push(`scsearch:${searchStr}`);
+                        queriesToTry.push(`ytmsearch:${searchStr}`);
+                        queriesToTry.push(`ytsearch:${searchStr}`);
+                        queriesToTry.push(`dzsearch:${searchStr}`);
+                    }
                 }
 
                 for (const qTarget of queriesToTry) {
@@ -819,11 +868,20 @@ const musicManager = {
         for (const node of activeNodes) {
             try {
                 let identifier = cleanQuery;
-                if (!cleanQuery.startsWith('http://') && !cleanQuery.startsWith('https://')) {
+                const isDirectUrl = cleanQuery.startsWith('http://') || cleanQuery.startsWith('https://');
+                const isYouTubeSingleUrl = isDirectUrl && /(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(cleanQuery) && !/[?&]list=/i.test(cleanQuery);
+
+                // If user pasted a direct YouTube video URL (or selected one from dashboard autocomplete),
+                // some public Lavalink nodes fail to decode YouTube video streams directly.
+                // Resolve metadata via yt-search if needed and search scsearch / ytmsearch / ytsearch so audio always decodes cleanly.
+                if (!isDirectUrl) {
                     identifier = `ytsearch:${cleanQuery}`;
                 }
 
-                const res = await node.rest.resolve(identifier);
+                let res = await node.rest.resolve(identifier);
+                if ((!res || !res.data || res.loadType === 'empty' || res.loadType === 'error') && !isDirectUrl) {
+                    res = await node.rest.resolve(`scsearch:${cleanQuery}`);
+                }
                 if (res && res.data) {
                     if (res.loadType === 'track') {
                         const t = res.data;
