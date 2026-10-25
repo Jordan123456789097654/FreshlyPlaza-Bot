@@ -137,15 +137,15 @@ module.exports = {
     // Lavalink Nodes (Shoukaku v4 for ultra low RAM audio streaming)
     lavalinkNodes: [
         {
-            name: 'Trinium-SSL',
-            url: 'lavalink-v4.triniumhost.com:443',
-            auth: 'free',
-            secure: true
-        },
-        {
             name: 'Serenetia-SSL',
             url: 'lavalinkv4.serenetia.com:443',
             auth: 'https://dsc.gg/ajidevserver',
+            secure: true
+        },
+        {
+            name: 'Trinium-NodeLink',
+            url: 'nodelink.triniumhost.com:443',
+            auth: 'free',
             secure: true
         },
         {
