@@ -1597,7 +1597,7 @@ const server = http.createServer(async (req, res) => {
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
             try {
-                const { action, seconds } = JSON.parse(body);
+                const { action, seconds, index, url } = JSON.parse(body);
                 const musicManager = require('./utils/musicManager');
                 const guild = client.guilds.cache.get(config.guildId);
                 if (!guild) {
@@ -1621,8 +1621,19 @@ const server = http.createServer(async (req, res) => {
                     await queue.stop();
                 } else if (action === 'shuffle') {
                     queue.shuffle();
+                    if (queue.preEncodeNextTrack) queue.preEncodeNextTrack();
                 } else if (action === 'clear') {
                     queue.queue = [];
+                } else if (action === 'dedupe') {
+                    if (queue.dedupe) queue.dedupe();
+                } else if (action === 'move_top' && index !== undefined) {
+                    if (!url || (queue.queue[index] && queue.queue[index].url === url)) {
+                        if (queue.moveToTop) queue.moveToTop(index);
+                    }
+                } else if (action === 'play_index' && index !== undefined) {
+                    if (!url || (queue.queue[index] && queue.queue[index].url === url)) {
+                        if (queue.playAtIndex) await queue.playAtIndex(index);
+                    }
                 } else if (action === 'autoplay') {
                     queue.autoplay = !queue.autoplay;
                 } else if (action === 'seek' && seconds !== undefined) {
@@ -1780,11 +1791,16 @@ const server = http.createServer(async (req, res) => {
                     resolved.tracks.forEach(t => queue.queue.push(t));
                     if (!queue.isPlaying && !queue.currentTrack && queue.queue.length > 0) {
                         await queue.playTrack(queue.queue.shift());
+                    } else if (queue.preEncodeNextTrack) {
+                        queue.preEncodeNextTrack();
                     }
                 } else {
                     const track = resolved.type === 'track' ? resolved.track : resolved.topTrack;
                     if (queue.isPlaying || queue.currentTrack) {
                         queue.queue.push(track);
+                        if (queue.queue.length === 1 && queue.preEncodeNextTrack) {
+                            queue.preEncodeNextTrack();
+                        }
                     } else {
                         await queue.playTrack(track);
                     }
@@ -1792,6 +1808,128 @@ const server = http.createServer(async (req, res) => {
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/music/station' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { station } = JSON.parse(body);
+                const STATIONS = {
+                    store_hits: [
+                        'The Weeknd - Blinding Lights',
+                        'Dua Lipa - Levitating',
+                        'Bruno Mars - 24K Magic',
+                        'Calvin Harris - Feel So Close',
+                        'Post Malone - Circles',
+                        'Daft Punk - Get Lucky'
+                    ],
+                    throwbacks_2010s: [
+                        'Avicii - Wake Me Up',
+                        'Pitbull - Give Me Everything',
+                        'Katy Perry - Teenage Dream',
+                        'Rihanna - We Found Love',
+                        'OneRepublic - Counting Stars',
+                        'David Guetta - Titanium'
+                    ],
+                    lofi_chill: [
+                        'Joji - Glimpse of Us',
+                        'Rex Orange County - Best Friend',
+                        'Daniel Caesar - Best Part',
+                        'Frank Ocean - Pink + White',
+                        'Kali Uchis - Telepatia',
+                        'Billie Eilish - Birds of a Feather'
+                    ],
+                    late_night_rnb: [
+                        'SZA - Snooze',
+                        'The Weeknd - Die For You',
+                        'Drake - Passionfruit',
+                        'Bryson Tiller - Exchange',
+                        'Chris Brown - Under The Influence',
+                        'Miguel - Sure Thing'
+                    ],
+                    hype_gym: [
+                        'Travis Scott - FE!N',
+                        'Kanye West - Stronger',
+                        'Eminem - Till I Collapse',
+                        'Kendrick Lamar - HUMBLE.',
+                        '21 Savage - redrum',
+                        'Playboi Carti - Sky'
+                    ],
+                    pop_party: [
+                        'Sabrina Carpenter - Espresso',
+                        'Taylor Swift - Cruel Summer',
+                        'Lady Gaga - Just Dance',
+                        'Usher - Yeah!',
+                        'Flo Rida - Low',
+                        'Black Eyed Peas - I Gotta Feeling'
+                    ]
+                };
+                const tracksToLoad = STATIONS[station];
+                if (!tracksToLoad) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Unknown station' }));
+                }
+
+                const musicManager = require('./utils/musicManager');
+                const guild = client.guilds.cache.get(config.guildId);
+                if (!guild) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Guild unavailable' }));
+                }
+                const queue = musicManager.getQueue(guild.id);
+
+                if (!queue.player) {
+                    const activeUserVc = guild.channels.cache.find(c => c.isVoiceBased() && c.members.filter(m => !m.user.bot).size > 0);
+                    const configMusicVc = config.channels.musicLoungeVoice ? guild.channels.cache.get(config.channels.musicLoungeVoice) : null;
+                    const defaultVc = activeUserVc
+                        || configMusicVc
+                        || guild.channels.cache.find(c => c.isVoiceBased() && c.name.toLowerCase().includes('music'))
+                        || guild.channels.cache.find(c => c.isVoiceBased());
+                    const defaultText = (config.channels.musicCommands && guild.channels.cache.get(config.channels.musicCommands))
+                        || guild.channels.cache.find(c => c.name === 'music-commands')
+                        || guild.channels.cache.find(c => c.isTextBased());
+                    if (!defaultVc) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        return res.end(JSON.stringify({ error: 'No voice channel found in server' }));
+                    }
+                    await queue.connect(defaultVc, defaultText);
+                }
+
+                // Resolve the first song immediately to start playback fast, then resolve the rest in background
+                const shuffled = [...tracksToLoad].sort(() => Math.random() - 0.5);
+                const firstRes = await musicManager.resolveQuery(shuffled[0], { id: 'RADIO', tag: '📻 Grandway Radio' });
+                const firstTrack = firstRes.track || firstRes.topTrack;
+                if (firstTrack) {
+                    if (queue.isPlaying || queue.currentTrack) {
+                        queue.queue.push(firstTrack);
+                    } else {
+                        await queue.playTrack(firstTrack);
+                    }
+                }
+
+                // Background-resolve the remaining station tracks
+                (async () => {
+                    for (let i = 1; i < shuffled.length; i++) {
+                        try {
+                            const r = await musicManager.resolveQuery(shuffled[i], { id: 'RADIO', tag: '📻 Grandway Radio' });
+                            const t = r.track || r.topTrack;
+                            if (t) queue.queue.push(t);
+                        } catch (_) {}
+                    }
+                    if (queue.preEncodeNextTrack) queue.preEncodeNextTrack();
+                })();
+
+                queue.autoplay = true;
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true, count: shuffled.length }));
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ error: e.message }));
@@ -1883,8 +2021,8 @@ const server = http.createServer(async (req, res) => {
         const musicManager = require('./utils/musicManager');
         const guild = client.guilds.cache.get(config.guildId);
         const queue = guild ? musicManager.getQueue(guild.id) : null;
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify(queue && queue.currentLyrics ? queue.currentLyrics : { syncedLyrics: [], plainLyrics: null }));
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        return res.end(JSON.stringify(queue && queue.currentLyrics ? queue.currentLyrics : { syncedLyrics: [], plainLyrics: null, trackUrl: null }));
     }
 
     // 7.9. Music Live State API (single source of truth for the live dashboard; polled, never reloaded)
@@ -1894,14 +2032,21 @@ const server = http.createServer(async (req, res) => {
         const queue = guild ? musicManager.getQueue(guild.id) : null;
 
         const slim = (t) => t ? {
-            title: t.title, author: t.author, url: t.url, thumbnail: t.thumbnail || null,
-            duration: t.duration, seconds: t.seconds || 0,
+            title: t.cleanTitle || t.title,
+            rawTitle: t.title,
+            author: t.cleanAuthor || t.author,
+            url: t.url,
+            thumbnail: t.thumbnail || null,
+            duration: t.duration,
+            seconds: t.seconds || 0,
             requester: t.requester ? t.requester.tag : null
         } : null;
 
         const isPlaying = !!(queue && queue.isPlaying && queue.currentTrack);
         const isPaused = !!(queue && (queue.isPausedState ? queue.isPausedState() : (queue.player && queue.player.paused)));
         const lyr = queue ? queue.currentLyrics : null;
+        const curUrl = isPlaying && queue.currentTrack ? queue.currentTrack.url : null;
+        const hasLyricsForCurrent = !!(lyr && (!lyr.trackUrl || lyr.trackUrl === curUrl) && ((lyr.syncedLyrics && lyr.syncedLyrics.length) || lyr.plainLyrics));
 
         const voiceChannels = guild ? guild.channels.cache
             .filter(c => c.isVoiceBased())
@@ -1936,7 +2081,8 @@ const server = http.createServer(async (req, res) => {
             voiceChannels,
             listeners,
             lyricsLoading: !!(queue && queue.lyricsLoading),
-            hasLyrics: !!(lyr && ((lyr.syncedLyrics && lyr.syncedLyrics.length) || lyr.plainLyrics))
+            hasLyrics: hasLyricsForCurrent,
+            lyricsTrackUrl: lyr && lyr.trackUrl ? lyr.trackUrl : null
         }));
     }
 

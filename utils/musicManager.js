@@ -430,6 +430,79 @@ class GuildMusicQueue {
         return this.player;
     }
 
+    async _encodeSingleTrack(track, node, _retried = false) {
+        if (!track || !node) return null;
+        if (!_retried && track.encoded && track.encodedNode === node.name) {
+            return track.encoded;
+        }
+
+        const searchStr = buildCleanSearchString(track.title, track.author);
+        const isDirectNonYtUrl = track.url
+            && (track.url.startsWith('http://') || track.url.startsWith('https://'))
+            && !/(?:youtube\.com|youtu\.be)/i.test(track.url);
+
+        const queriesToTry = [];
+        if (track._forcePrefix && searchStr) {
+            queriesToTry.push(`${track._forcePrefix}${searchStr}`);
+        }
+        if (isDirectNonYtUrl && !track._preferAltSource) {
+            queriesToTry.push(track.url);
+        }
+        if (searchStr) {
+            // Prioritize Spotify (LavaSrc), YouTube Music, and Apple Music first (100% playable streams on MilloHost)
+            if (!queriesToTry.includes(`spsearch:${searchStr}`)) queriesToTry.push(`spsearch:${searchStr}`);
+            if (!queriesToTry.includes(`ytmsearch:${searchStr}`)) queriesToTry.push(`ytmsearch:${searchStr}`);
+            if (!queriesToTry.includes(`amsearch:${searchStr}`)) queriesToTry.push(`amsearch:${searchStr}`);
+            if (!queriesToTry.includes(`ytsearch:${searchStr}`)) queriesToTry.push(`ytsearch:${searchStr}`);
+            if (!queriesToTry.includes(`scsearch:${searchStr}`)) queriesToTry.push(`scsearch:${searchStr}`);
+        }
+        if (track.url && (track.url.startsWith('http://') || track.url.startsWith('https://')) && !queriesToTry.includes(track.url)) {
+            queriesToTry.push(track.url);
+        }
+
+        for (const qTarget of queriesToTry) {
+            try {
+                const res = await node.rest.resolve(qTarget);
+                if (res && res.data && res.loadType !== 'empty' && res.loadType !== 'error') {
+                    const candidates = Array.isArray(res.data)
+                        ? res.data
+                        : (res.data.tracks || [res.data]);
+                    const targetSec = track.seconds || 0;
+                    const chosen = candidates.find(c => {
+                        if (!c || !c.encoded) return false;
+                        if (c.pluginInfo && c.pluginInfo.isPreview) return false;
+                        const cSec = Math.floor((c.info?.length || 0) / 1000);
+                        if (targetSec > 120 && cSec > 0 && cSec < 60) return false;
+                        return true;
+                    }) || candidates[0];
+
+                    if (chosen && chosen.encoded) {
+                        track.encoded = chosen.encoded;
+                        track.encodedNode = node.name;
+                        const info = chosen.info || {};
+                        if (info.title) track.cleanTitle = info.title;
+                        if (info.author) track.cleanAuthor = info.author;
+                        if (info.artworkUrl && !track.thumbnail) track.thumbnail = info.artworkUrl;
+                        const streamSecs = Math.floor((info.length || 0) / 1000);
+                        if (streamSecs > 15) {
+                            track.seconds = streamSecs;
+                            track.duration = musicManager.formatSeconds(streamSecs);
+                        }
+                        return chosen.encoded;
+                    }
+                }
+            } catch (_) {}
+        }
+        return null;
+    }
+
+    preEncodeNextTrack() {
+        if (!this.player || !this.player.node || this.queue.length === 0) return;
+        const next = this.queue[0];
+        if (!next || (next.encoded && next.encodedNode === this.player.node.name)) return;
+        this._encodeSingleTrack(next, this.player.node, false).catch(() => {});
+    }
+
     async playTrack(track, seekSeconds = 0, _retried = false) {
         if (!track) return;
         this.cancelDisconnect();
@@ -444,18 +517,6 @@ class GuildMusicQueue {
         if (!isSameTrackRetry) {
             this.currentLyrics = null;
             this.lyricsLoading = true;
-            // Fetch synced lyrics in background (guarded so stale responses don't overwrite newer tracks)
-            const trackUrl = track.url;
-            lyricsService.fetchLyrics(track).then(res => {
-                if (this.currentTrack && this.currentTrack.url === trackUrl) {
-                    this.currentLyrics = res;
-                    this.lyricsLoading = false;
-                }
-            }).catch(() => {
-                if (this.currentTrack && this.currentTrack.url === trackUrl) {
-                    this.lyricsLoading = false;
-                }
-            });
         }
 
         try {
@@ -466,69 +527,27 @@ class GuildMusicQueue {
                 throw new Error('Voice player is not connected.');
             }
 
-            // Ensure track is encoded by the active player's own node (or re-encode on failover)
+            // Ensure track is encoded by the active player's own node (and populates cleanTitle / cleanAuthor / exact stream duration)
             const playerNodeName = this.player.node ? this.player.node.name : null;
-            let trackEncoded = (_retried || (track.encodedNode && playerNodeName && track.encodedNode !== playerNodeName))
-                ? null
-                : track.encoded;
-
-            if (!trackEncoded && this.player.node) {
-                const node = this.player.node;
-                const searchStr = buildCleanSearchString(track.title, track.author);
-                const isDirectNonYtUrl = track.url
-                    && (track.url.startsWith('http://') || track.url.startsWith('https://'))
-                    && !/(?:youtube\.com|youtu\.be)/i.test(track.url);
-
-                const queriesToTry = [];
-                if (track._forcePrefix && searchStr) {
-                    queriesToTry.push(`${track._forcePrefix}${searchStr}`);
-                }
-                if (isDirectNonYtUrl && !track._preferAltSource) {
-                    queriesToTry.push(track.url);
-                }
-                if (searchStr) {
-                    // Prioritize Spotify (LavaSrc), YouTube Music, and Apple Music first (100% playable streams on MilloHost),
-                    // keeping SoundCloud last because SoundCloud API changes cause "SoundCloud track has no playable stream format" on older Lavaplayer builds.
-                    if (!queriesToTry.includes(`spsearch:${searchStr}`)) queriesToTry.push(`spsearch:${searchStr}`);
-                    if (!queriesToTry.includes(`ytmsearch:${searchStr}`)) queriesToTry.push(`ytmsearch:${searchStr}`);
-                    if (!queriesToTry.includes(`amsearch:${searchStr}`)) queriesToTry.push(`amsearch:${searchStr}`);
-                    if (!queriesToTry.includes(`ytsearch:${searchStr}`)) queriesToTry.push(`ytsearch:${searchStr}`);
-                    if (!queriesToTry.includes(`scsearch:${searchStr}`)) queriesToTry.push(`scsearch:${searchStr}`);
-                }
-                if (track.url && (track.url.startsWith('http://') || track.url.startsWith('https://')) && !queriesToTry.includes(track.url)) {
-                    queriesToTry.push(track.url);
-                }
-
-                for (const qTarget of queriesToTry) {
-                    try {
-                        const res = await node.rest.resolve(qTarget);
-                        if (res && res.data && res.loadType !== 'empty' && res.loadType !== 'error') {
-                            const candidates = Array.isArray(res.data)
-                                ? res.data
-                                : (res.data.tracks || [res.data]);
-                            // Pick first candidate that is not a short preview/interview clip when target duration is known
-                            const targetSec = track.seconds || 0;
-                            let chosen = candidates.find(c => {
-                                if (!c || !c.encoded) return false;
-                                if (c.pluginInfo && c.pluginInfo.isPreview) return false;
-                                const cSec = Math.floor((c.info?.length || 0) / 1000);
-                                if (targetSec > 120 && cSec > 0 && cSec < 60) return false;
-                                return true;
-                            }) || candidates[0];
-
-                            if (chosen && chosen.encoded) {
-                                trackEncoded = chosen.encoded;
-                                track.encoded = trackEncoded;
-                                track.encodedNode = node.name;
-                                break;
-                            }
-                        }
-                    } catch (_) {}
-                }
-            }
+            const trackEncoded = await this._encodeSingleTrack(track, this.player.node, Boolean(_retried));
 
             if (!trackEncoded) {
                 throw new Error(`Node "${playerNodeName || 'unknown'}" could not encode track stream`);
+            }
+
+            // Fetch synced lyrics using the resolved studio metadata & exact audio duration
+            if (!isSameTrackRetry) {
+                const trackUrl = track.url;
+                lyricsService.fetchLyrics(track).then(res => {
+                    if (this.currentTrack && this.currentTrack.url === trackUrl) {
+                        this.currentLyrics = res ? { ...res, trackUrl } : null;
+                        this.lyricsLoading = false;
+                    }
+                }).catch(() => {
+                    if (this.currentTrack && this.currentTrack.url === trackUrl) {
+                        this.lyricsLoading = false;
+                    }
+                });
             }
 
             // Play track via Lavalink
@@ -540,6 +559,9 @@ class GuildMusicQueue {
             // Re-apply volume & filters
             await this.player.setGlobalVolume(this.volume);
             await this.applyFilter(this.activeFilter, this.speed, false);
+
+            // Pre-encode the next queued song in background so transitions are instant
+            this.preEncodeNextTrack();
         } catch (err) {
             // The node accepted the voice join but refuses to play (403 / 404 / 5xx / encode failure):
             // Only fail over to another node if a DIFFERENT healthy connected node exists!
@@ -746,7 +768,45 @@ class GuildMusicQueue {
 
     remove(index) {
         if (index < 0 || index >= this.queue.length) return null;
-        return this.queue.splice(index, 1)[0];
+        const removed = this.queue.splice(index, 1)[0];
+        if (index === 0) this.preEncodeNextTrack();
+        return removed;
+    }
+
+    moveToTop(index) {
+        if (index <= 0 || index >= this.queue.length) return false;
+        const [item] = this.queue.splice(index, 1);
+        this.queue.unshift(item);
+        this.preEncodeNextTrack();
+        return true;
+    }
+
+    async playAtIndex(index) {
+        if (index < 0 || index >= this.queue.length) return null;
+        const [target] = this.queue.splice(index, 1);
+        if (this.currentTrack) {
+            this.history.unshift({
+                ...this.currentTrack,
+                playedAt: new Date().toISOString()
+            });
+            if (this.history.length > 50) this.history.pop();
+        }
+        await this.playTrack(target);
+        return target;
+    }
+
+    dedupe() {
+        const seen = new Set();
+        if (this.currentTrack && this.currentTrack.url) seen.add(this.currentTrack.url);
+        const before = this.queue.length;
+        this.queue = this.queue.filter(t => {
+            const key = t.url || `${t.title}|${t.author}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        this.preEncodeNextTrack();
+        return before - this.queue.length;
     }
 
     setSleepTimer(minutes, textChannel) {

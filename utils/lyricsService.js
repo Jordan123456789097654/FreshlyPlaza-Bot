@@ -6,6 +6,8 @@ const https = require('https');
  * - Queries LRCLIB with strict artist + title validation so wrong songs are never returned
  * - Falls back to Lyrics.ovh plain lyrics if LRCLIB has no match
  */
+const REPOST_CHANNEL_REGEX = /\b(?:7clouds|syrebralvibes|unique\s*vibes|shadow\s*music|taj\s*tracks|chilltracks|vibe\s*music|royal\s*music|cloudx|dope\s*lyrics|pillow|popular\s*music|gold\s*coast\s*music|wave\s*music|trap\s*nation|bass\s*nation|chill\s*nation|proximity|mrsuicide\s*sheep|suicidesheep|monstercat|ncs|nocopyrightsounds|ukf|spinnin|selected|capital\s*fm|bbc\s*radio|vevo|lyrics?\s*station|latin\s*hype|reggaeton\s*world|tiktok\s*tunes|speed\s*up\s*songs)\b/i;
+
 const lyricsService = {
     /**
      * Clean a raw YouTube / SoundCloud title or artist string
@@ -14,20 +16,27 @@ const lyricsService = {
         let title = String(rawTitle || '').trim();
         let author = String(rawAuthor || '').trim();
 
+        // Check if the uploader is a known lyric/repost channel rather than the actual recording artist
+        const isRepostChannel = REPOST_CHANNEL_REGEX.test(author);
+
         // Remove common YouTube / SoundCloud channel suffixes from author
         author = author
             .replace(/\s*-\s*Topic$/i, '')
             .replace(/VEVO$/i, '')
-            .replace(/\b(?:Official|Music|Records|Recordings|Channel|TV|Audio|Prod\.?)\b/gi, '')
+            .replace(/\b(?:Official|Music|Records|Recordings|Channel|TV|Audio|Prod\.?|Lyrics?)\b/gi, '')
             .replace(/[_|•]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
+
+        if (isRepostChannel) {
+            author = '';
+        }
 
         // Remove bracketed/parenthesized noise like (Official Video), [Lyrics], (feat. X), [4K Remaster]
         title = title
             .replace(/\(.*?\)|\[.*?\]|\{.*?\}/g, ' ')
             .replace(/['"“”‘’]/g, '')
-            .replace(/\b(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video|visualizer)|live\s*(?:at|from|in|on|performance|session).*|summertime\s*ball.*|lyric\s*video|lyrics?|visualizer|audio|video|hd|hq|4k|remastered|explicit|clean\s*version|slowed|reverb|sped\s*up|nightcore|bass\s*boosted|prod\.?\s+by\s+\S+)\b/gi, ' ')
+            .replace(/\b(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video|visualizer)|live\s*(?:at|from|in|on|performance|session).*|summertime\s*ball.*|world\s*cup\s*(?:song|anthem)?\s*\d{0,4}|greatest\s*hits\s*\d{0,4}.*|full\s*album.*|the\s*best\s*of\s+.*|lyric\s*video|lyrics?|visualizer|audio|video|hd|hq|4k|remastered|explicit|clean\s*version|slowed|reverb|sped\s*up|nightcore|bass\s*boosted|tiktok\s*viral|prod\.?\s+by\s+\S+)\b/gi, ' ')
             .replace(/\b(?:ft\.?|feat\.?|featuring)\s+[^-–—|]+/gi, ' ')
             .replace(/[|•"_]/g, ' ')
             .replace(/\s+/g, ' ')
@@ -40,11 +49,18 @@ const lyricsService = {
         if (dashParts.length >= 2) {
             extractedArtist = dashParts[0].trim();
             extractedTrack = dashParts.slice(1).join(' ').trim();
+            // If there were multiple dashes like "PINK - Greatest Hits", strip trailing duplicate artist or compilation text
+            if (dashParts.length >= 3 && extractedTrack.toLowerCase().includes(extractedArtist.toLowerCase())) {
+                extractedTrack = dashParts[1].trim();
+            }
         }
 
         const primaryArtist = extractedArtist || author;
         const secondaryArtist = extractedArtist && author && extractedArtist.toLowerCase() !== author.toLowerCase() ? author : '';
-        const cleanPrimaryArtist = primaryArtist.replace(/\b(?:ft\.?|feat\.?|featuring|&|x|,)\s+.*/i, '').trim();
+        const cleanPrimaryArtist = primaryArtist
+            .replace(/\b(?:ft\.?|feat\.?|featuring|&|x|,|and|with)\s+.*/i, '')
+            .replace(/p!nk/gi, 'Pink')
+            .trim();
 
         return {
             trackName: extractedTrack || title,
@@ -121,8 +137,8 @@ const lyricsService = {
         if (typeof trackOrQuery === 'string') {
             rawTitle = trackOrQuery;
         } else {
-            rawTitle = trackOrQuery.title || '';
-            rawAuthor = trackOrQuery.author || '';
+            rawTitle = trackOrQuery.cleanTitle || trackOrQuery.title || '';
+            rawAuthor = trackOrQuery.cleanAuthor || trackOrQuery.author || '';
             targetSeconds = Number(trackOrQuery.seconds) || 0;
         }
 
@@ -136,6 +152,14 @@ const lyricsService = {
             const exact = await this._requestJson(getUrl);
             if (exact && !exact.code && (exact.syncedLyrics || exact.plainLyrics)) {
                 return this._formatResult(exact);
+            }
+            // Retry /api/get without duration if the video duration had an intro/outro difference
+            if (targetSeconds > 0) {
+                const getUrlNoDur = `https://lrclib.net/api/get?track_name=${encodeURIComponent(meta.trackName)}&artist_name=${encodeURIComponent(meta.artistName)}`;
+                const exactNoDur = await this._requestJson(getUrlNoDur);
+                if (exactNoDur && !exactNoDur.code && (exactNoDur.syncedLyrics || exactNoDur.plainLyrics)) {
+                    return this._formatResult(exactNoDur);
+                }
             }
         }
 
@@ -217,12 +241,15 @@ const lyricsService = {
             );
             const hasAnyArtistOverlap = this._artistMatches(meta, item.artistName);
 
-            // If we know the artist or duration, don't allow a completely unrelated artist unless duration is virtually identical
             const durationDiff = (targetSeconds > 0 && item.duration > 0) ? Math.abs(targetSeconds - item.duration) : 999;
-            if (!hasAnyArtistOverlap && durationDiff > 4) continue;
 
-            // Reject if duration is off by more than 35 seconds
-            if (targetSeconds > 0 && item.duration > 0 && durationDiff > 35) continue;
+            // If we have an artist name, strictly require artist overlap so a song with the same title by another artist is never selected!
+            if ((meta.artistName || meta.rawArtist) && !hasAnyArtistOverlap) {
+                if (titleSim < 0.99 || durationDiff > 2) continue;
+            }
+
+            // Reject if duration is off by more than 45 seconds
+            if (targetSeconds > 0 && item.duration > 0 && durationDiff > 45) continue;
 
             let score = titleSim * 65 + artistSim * 40 + (hasAnyArtistOverlap ? 15 : 0);
 
