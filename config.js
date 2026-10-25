@@ -143,12 +143,6 @@ module.exports = {
             secure: true
         },
         {
-            name: 'AjieDev-v4-SSL',
-            url: 'lava-v4.ajieblogs.eu.org:443',
-            auth: 'https://dsc.gg/ajidevserver',
-            secure: true
-        },
-        {
             name: 'MilloHost-SSL',
             url: 'lava-v4.millohost.my.id:443',
             auth: 'https://discord.gg/mjS5J2K3ep',

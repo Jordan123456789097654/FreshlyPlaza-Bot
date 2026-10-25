@@ -348,7 +348,7 @@ class GuildMusicQueue {
 
         // Fetch synced lyrics in background (guarded so stale responses don't overwrite newer tracks)
         const trackUrl = track.url;
-        lyricsService.fetchLyrics(`${track.title} ${track.author || ''}`).then(res => {
+        lyricsService.fetchLyrics(track).then(res => {
             if (this.currentTrack && this.currentTrack.url === trackUrl) {
                 this.currentLyrics = res;
             }
@@ -764,7 +764,15 @@ const musicManager = {
         });
 
         this.shoukaku.on('close', (name, code, reason) => {
-            console.warn(`[LAVALINK] Node "${name}" closed (code ${code}): ${reason || 'No reason'}`);
+            const reasonStr = String(reason || 'No reason');
+            console.warn(`[LAVALINK] Node "${name}" closed (code ${code}): ${reasonStr}`);
+            // Stop infinite reconnect spam if a public node rate-limits or bans this bot ID (code 4000)
+            if (code === 4000 || /too many websocket/i.test(reasonStr)) {
+                console.warn(`🛑 [LAVALINK] Removing rate-limited node "${name}" from pool to prevent reconnect loop.`);
+                try {
+                    this.shoukaku.removeNode(name, 'Rate-limited by remote host');
+                } catch (_) {}
+            }
         });
 
         this.shoukaku.on('disconnect', (name, count) => {
