@@ -4,6 +4,39 @@ const yts = require('yt-search');
 const lyricsService = require('./lyricsService');
 
 /**
+ * Strips live/event/channel suffixes and quotes from video titles and author names
+ * so SoundCloud, Deezer, Spotify, and YouTube Music searches resolve the clean studio track.
+ */
+function buildCleanSearchString(titleRaw, authorRaw) {
+    let title = String(titleRaw || '')
+        .replace(/\(.*?\)|\[.*?\]|\{.*?\}/g, ' ')
+        .replace(/['"“”‘’]/g, '')
+        .replace(/\b(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video|visualizer)|live\s*(?:at|from|in|on|performance|session).*|summertime\s*ball.*|capital\s*fm.*|bbc\s*radio.*|vevo|4k|hd|hq|lyrics?|explicit|clean\s*version|audio)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    let author = String(authorRaw || '')
+        .replace(/\s*-\s*Topic$|VEVO$|Official$/gi, '')
+        .replace(/\b(?:capital\s*fm|bbc\s*radio\s*1?|vevo|records|entertainment|music)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    // If title already contains "Artist - Song", don't duplicate or append a noisy uploader name
+    if (title.includes(' - ')) {
+        const parts = title.split(' - ').map(s => s.trim()).filter(Boolean);
+        if (parts.length >= 2) {
+            return `${parts[0]} ${parts[1]}`.replace(/\s+/g, ' ').trim();
+        }
+    }
+
+    if (author && title.toLowerCase().includes(author.toLowerCase())) {
+        return title;
+    }
+
+    return `${title} ${author}`.replace(/\s+/g, ' ').trim() || String(titleRaw || '').trim();
+}
+
+/**
  * Filter Presets mapped directly to Lavalink Audio Filters (equalizer, timescale, karaoke)
  * Executed remotely on the Lavalink server with 0 CPU & 0 RAM load on the bot container!
  */
@@ -129,6 +162,7 @@ class GuildMusicQueue {
 
         // Synced Lyrics, Autoplay & Sleep Timer
         this.currentLyrics = null;
+        this.lyricsLoading = false;
         this.sleepTimeout = null;
         this.sleepEndsAt = null;
         this.skipVotes = new Set();
@@ -185,34 +219,52 @@ class GuildMusicQueue {
                 finishedTrack.encoded = null;
                 finishedTrack.encodedNode = null;
 
-                // Attempt 1: Re-encode using SoundCloud / Deezer fallback on the current node
+                // Attempt 1: Re-encode using SoundCloud stream on the current node
                 if (decodeAttempt === 1) {
-                    console.warn(`[LAVALINK RECOVERY] Track "${finishedTrack.title}" failed to decode on "${this.player?.node?.name}". Retrying with SoundCloud/Deezer audio stream...`);
+                    console.warn(`[LAVALINK RECOVERY] Track "${finishedTrack.title}" failed to decode on "${this.player?.node?.name}". Retrying with SoundCloud audio stream...`);
                     finishedTrack._preferAltSource = true;
+                    finishedTrack._forcePrefix = 'scsearch:';
                     this._suppressNextStartEmbed = true;
                     await this.playTrack(finishedTrack, 0, 0);
                     return;
                 }
 
-                // Attempt 2: Quarantine current node and fail over to the next healthy node
-                if (decodeAttempt === 2 && this.voiceChannel && musicManager.shoukaku) {
+                // Attempt 2: Re-encode using Deezer / Apple Music / Spotify stream on the current node
+                if (decodeAttempt === 2) {
+                    console.warn(`[LAVALINK RECOVERY] Track "${finishedTrack.title}" failed on Attempt 1. Retrying with Deezer/Spotify mirror stream...`);
+                    finishedTrack._preferAltSource = true;
+                    finishedTrack._forcePrefix = 'dzsearch:';
+                    this._suppressNextStartEmbed = true;
+                    await this.playTrack(finishedTrack, 0, 0);
+                    return;
+                }
+
+                // Attempt 3: Only fail over to another node if a DIFFERENT healthy connected node actually exists!
+                // Never call leaveVoiceChannel if current node is the only connected node (prevents Code 4022 Call Terminated).
+                if (decodeAttempt === 3 && this.voiceChannel && musicManager.shoukaku) {
                     const badNodeName = this.player && this.player.node ? this.player.node.name : null;
-                    console.warn(`[LAVALINK RECOVERY] Node "${badNodeName}" failed to decode "${finishedTrack.title}" twice. Failing over to next node...`);
-                    if (badNodeName) musicManager.markBad(badNodeName, 120000);
-                    try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
-                    this.player = null;
-                    try {
-                        await this.connect(this.voiceChannel, this.textChannel);
-                        this._suppressNextStartEmbed = true;
-                        await this.playTrack(finishedTrack, 0, 1);
-                        return;
-                    } catch (_) {}
+                    const otherNodes = musicManager.getHealthyNodes().filter(n => n.name !== badNodeName);
+                    if (otherNodes.length > 0) {
+                        console.warn(`[LAVALINK RECOVERY] Node "${badNodeName}" failed to decode "${finishedTrack.title}". Failing over to "${otherNodes[0].name}"...`);
+                        if (badNodeName) musicManager.markBad(badNodeName, 120000);
+                        try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
+                        this.player = null;
+                        try {
+                            await this.connect(this.voiceChannel, this.textChannel);
+                            this._suppressNextStartEmbed = true;
+                            await this.playTrack(finishedTrack, 0, 1);
+                            return;
+                        } catch (_) {}
+                    } else {
+                        console.warn(`[LAVALINK RECOVERY] Track "${finishedTrack.title}" could not be decoded on "${badNodeName}" and no alternate nodes are online. Keeping voice connection alive.`);
+                    }
                 }
             }
 
             if (finishedTrack) {
                 delete finishedTrack._decodeRetries;
                 delete finishedTrack._preferAltSource;
+                delete finishedTrack._forcePrefix;
                 this.history.unshift({
                     ...finishedTrack,
                     playedAt: new Date().toISOString()
@@ -373,26 +425,29 @@ class GuildMusicQueue {
         if (!track) return;
         this.cancelDisconnect();
         this._stopping = false;
+        const isSameTrackRetry = this.currentTrack && this.currentTrack.url === track.url && (this.currentLyrics || this.lyricsLoading);
         this.currentTrack = track;
-        this.currentLyrics = null;
-        this.lyricsLoading = true;
         this.isPlaying = true;
         this.pausedAt = 0;
         this._seeking = seekSeconds > 0;
         this.playbackStartTime = Date.now() - (seekSeconds * 1000);
 
-        // Fetch synced lyrics in background (guarded so stale responses don't overwrite newer tracks)
-        const trackUrl = track.url;
-        lyricsService.fetchLyrics(track).then(res => {
-            if (this.currentTrack && this.currentTrack.url === trackUrl) {
-                this.currentLyrics = res;
-                this.lyricsLoading = false;
-            }
-        }).catch(() => {
-            if (this.currentTrack && this.currentTrack.url === trackUrl) {
-                this.lyricsLoading = false;
-            }
-        });
+        if (!isSameTrackRetry) {
+            this.currentLyrics = null;
+            this.lyricsLoading = true;
+            // Fetch synced lyrics in background (guarded so stale responses don't overwrite newer tracks)
+            const trackUrl = track.url;
+            lyricsService.fetchLyrics(track).then(res => {
+                if (this.currentTrack && this.currentTrack.url === trackUrl) {
+                    this.currentLyrics = res;
+                    this.lyricsLoading = false;
+                }
+            }).catch(() => {
+                if (this.currentTrack && this.currentTrack.url === trackUrl) {
+                    this.lyricsLoading = false;
+                }
+            });
+        }
 
         try {
             if (!this.player && this.voiceChannel) {
@@ -410,40 +465,51 @@ class GuildMusicQueue {
 
             if (!trackEncoded && this.player.node) {
                 const node = this.player.node;
-                const cleanTitle = String(track.title || '')
-                    .replace(/\(.*?\)|\[.*?\]/g, '')
-                    .replace(/\b(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video)|4k|hd|hq|lyrics?)\b/gi, '')
-                    .trim();
-                const cleanAuthor = String(track.author || '').replace(/\s*-\s*Topic$|VEVO$/gi, '').trim();
-                const searchStr = `${cleanTitle || track.title || ''} ${cleanAuthor}`.trim();
+                const searchStr = buildCleanSearchString(track.title, track.author);
+                const isDirectNonYtUrl = track.url
+                    && (track.url.startsWith('http://') || track.url.startsWith('https://'))
+                    && !/(?:youtube\.com|youtu\.be)/i.test(track.url);
 
                 const queriesToTry = [];
-                if (track._preferAltSource && searchStr) {
-                    // When YouTube decoding fails on a node, prefer SoundCloud / Deezer / Spotify audio streams first
-                    queriesToTry.push(`scsearch:${searchStr}`);
-                    queriesToTry.push(`dzsearch:${searchStr}`);
-                    queriesToTry.push(`spsearch:${searchStr}`);
-                    queriesToTry.push(`ytmsearch:${searchStr}`);
-                } else {
-                    if (track.url && (track.url.startsWith('http://') || track.url.startsWith('https://'))) {
-                        queriesToTry.push(track.url);
-                    }
-                    if (searchStr) {
-                        queriesToTry.push(`scsearch:${searchStr}`);
-                        queriesToTry.push(`ytmsearch:${searchStr}`);
-                        queriesToTry.push(`ytsearch:${searchStr}`);
-                        queriesToTry.push(`dzsearch:${searchStr}`);
-                    }
+                if (track._forcePrefix && searchStr) {
+                    queriesToTry.push(`${track._forcePrefix}${searchStr}`);
+                }
+                if (isDirectNonYtUrl && !track._preferAltSource) {
+                    queriesToTry.push(track.url);
+                }
+                if (searchStr) {
+                    // Always prefer SoundCloud / Deezer / Apple Music / Spotify streams over direct YouTube video streams,
+                    // because public Lavalink nodes frequently get HTTP 403 /cipher errors on YouTube googlevideo CDNs.
+                    if (!queriesToTry.includes(`scsearch:${searchStr}`)) queriesToTry.push(`scsearch:${searchStr}`);
+                    if (!queriesToTry.includes(`dzsearch:${searchStr}`)) queriesToTry.push(`dzsearch:${searchStr}`);
+                    if (!queriesToTry.includes(`spsearch:${searchStr}`)) queriesToTry.push(`spsearch:${searchStr}`);
+                    if (!queriesToTry.includes(`amsearch:${searchStr}`)) queriesToTry.push(`amsearch:${searchStr}`);
+                    if (!queriesToTry.includes(`ytmsearch:${searchStr}`)) queriesToTry.push(`ytmsearch:${searchStr}`);
+                    if (!queriesToTry.includes(`ytsearch:${searchStr}`)) queriesToTry.push(`ytsearch:${searchStr}`);
+                }
+                if (track.url && (track.url.startsWith('http://') || track.url.startsWith('https://')) && !queriesToTry.includes(track.url)) {
+                    queriesToTry.push(track.url);
                 }
 
                 for (const qTarget of queriesToTry) {
                     try {
                         const res = await node.rest.resolve(qTarget);
                         if (res && res.data && res.loadType !== 'empty' && res.loadType !== 'error') {
-                            trackEncoded = Array.isArray(res.data)
-                                ? res.data[0]?.encoded
-                                : (res.data.encoded || res.data.tracks?.[0]?.encoded);
-                            if (trackEncoded) {
+                            const candidates = Array.isArray(res.data)
+                                ? res.data
+                                : (res.data.tracks || [res.data]);
+                            // Pick first candidate that is not a short preview/interview clip when target duration is known
+                            const targetSec = track.seconds || 0;
+                            let chosen = candidates.find(c => {
+                                if (!c || !c.encoded) return false;
+                                if (c.pluginInfo && c.pluginInfo.isPreview) return false;
+                                const cSec = Math.floor((c.info?.length || 0) / 1000);
+                                if (targetSec > 120 && cSec > 0 && cSec < 60) return false;
+                                return true;
+                            }) || candidates[0];
+
+                            if (chosen && chosen.encoded) {
+                                trackEncoded = chosen.encoded;
                                 track.encoded = trackEncoded;
                                 track.encodedNode = node.name;
                                 break;
@@ -468,11 +534,12 @@ class GuildMusicQueue {
             await this.applyFilter(this.activeFilter, this.speed, false);
         } catch (err) {
             // The node accepted the voice join but refuses to play (403 / 404 / 5xx / encode failure):
-            // blacklist it, move this guild to the next healthy node, and retry up to 2 times.
+            // Only fail over to another node if a DIFFERENT healthy connected node exists!
             const retryCount = typeof _retried === 'number' ? _retried : (_retried ? 1 : 0);
-            if (retryCount < 2 && this.voiceChannel && musicManager.shoukaku) {
-                const badName = this.player && this.player.node ? this.player.node.name : null;
-                console.warn(`[LAVALINK] Node "${badName || 'unknown'}" failed to play (${err.status || err.message}). Failing over (attempt ${retryCount + 1})...`);
+            const badName = this.player && this.player.node ? this.player.node.name : null;
+            const otherNodes = musicManager.getHealthyNodes().filter(n => n.name !== badName);
+            if (retryCount < 2 && otherNodes.length > 0 && this.voiceChannel && musicManager.shoukaku) {
+                console.warn(`[LAVALINK] Node "${badName || 'unknown'}" failed to play (${err.status || err.message}). Failing over to "${otherNodes[0].name}" (attempt ${retryCount + 1})...`);
                 if (badName) musicManager.markBad(badName);
                 try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
                 this.player = null;
@@ -863,111 +930,79 @@ const musicManager = {
     },
 
     /**
-     * Resolves queries using Lavalink REST with graceful fallback to yt-search
+     * Resolves queries using Lavalink REST with graceful fallback to yt-search.
+     * Note: We intentionally do NOT pre-bind YouTube `encoded` strings here so `playTrack()`
+     * always encodes via clean SoundCloud / Deezer / Spotify audio streams on the active voice node,
+     * completely avoiding YouTube googlevideo HTTP 403 / cipher blocks on public Lavalink servers!
      */
     async resolveQuery(rawQuery, requester) {
         let cleanQuery = rawQuery.trim();
+        const isDirectUrl = cleanQuery.startsWith('http://') || cleanQuery.startsWith('https://');
+        const isYouTubeUrl = isDirectUrl && /(?:youtube\.com|youtu\.be)/i.test(cleanQuery);
+        const playlistMatch = cleanQuery.match(/[?&]list=([a-zA-Z0-9_-]+)/);
 
-        // Node check - iterate healthy connected nodes
+        // 1. If it's a direct non-YouTube URL (e.g. Spotify / SoundCloud / Apple Music / Deezer link), resolve on healthy node
         const activeNodes = this.getHealthyNodes();
-
-        for (const node of activeNodes) {
-            try {
-                let identifier = cleanQuery;
-                const isDirectUrl = cleanQuery.startsWith('http://') || cleanQuery.startsWith('https://');
-                const isYouTubeSingleUrl = isDirectUrl && /(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(cleanQuery) && !/[?&]list=/i.test(cleanQuery);
-
-                // If user pasted a direct YouTube video URL (or selected one from dashboard autocomplete),
-                // some public Lavalink nodes fail to decode YouTube video streams directly.
-                // Resolve metadata via yt-search if needed and search scsearch / ytmsearch / ytsearch so audio always decodes cleanly.
-                if (!isDirectUrl) {
-                    identifier = `ytsearch:${cleanQuery}`;
-                }
-
-                let res = await node.rest.resolve(identifier);
-                if ((!res || !res.data || res.loadType === 'empty' || res.loadType === 'error') && !isDirectUrl) {
-                    res = await node.rest.resolve(`scsearch:${cleanQuery}`);
-                }
-                if (res && res.data) {
-                    if (res.loadType === 'track') {
-                        const t = res.data;
-                        const info = t.info || {};
-                        const track = {
-                            title: info.title || 'Unknown Title',
-                            url: info.uri || cleanQuery,
-                            duration: this.formatSeconds(Math.floor((info.length || 0) / 1000)),
-                            seconds: Math.floor((info.length || 0) / 1000),
-                            author: info.author || 'Unknown Artist',
-                            thumbnail: info.artworkUrl || `https://img.youtube.com/vi/${info.identifier}/hqdefault.jpg`,
-                            encoded: t.encoded,
-                            encodedNode: node.name,
-                            requester: {
-                                id: requester.id,
-                                tag: requester.tag || requester.username,
-                                avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
-                            }
-                        };
-                        return { type: 'track', track };
-                    } else if (res.loadType === 'playlist') {
-                        const playlistData = res.data;
-                        const tracks = (playlistData.tracks || []).map(t => {
+        if (isDirectUrl && !isYouTubeUrl) {
+            for (const node of activeNodes) {
+                try {
+                    const res = await node.rest.resolve(cleanQuery);
+                    if (res && res.data) {
+                        if (res.loadType === 'track') {
+                            const t = res.data;
                             const info = t.info || {};
                             return {
-                                title: info.title || 'Unknown Title',
-                                url: info.uri || `https://www.youtube.com/watch?v=${info.identifier}`,
-                                duration: this.formatSeconds(Math.floor((info.length || 0) / 1000)),
-                                seconds: Math.floor((info.length || 0) / 1000),
-                                author: info.author || 'Unknown Artist',
-                                thumbnail: info.artworkUrl || `https://img.youtube.com/vi/${info.identifier}/hqdefault.jpg`,
-                                encoded: t.encoded,
-                                encodedNode: node.name,
-                                requester: {
-                                    id: requester.id,
-                                    tag: requester.tag || requester.username,
-                                    avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+                                type: 'track',
+                                track: {
+                                    title: info.title || 'Unknown Title',
+                                    url: info.uri || cleanQuery,
+                                    duration: this.formatSeconds(Math.floor((info.length || 0) / 1000)),
+                                    seconds: Math.floor((info.length || 0) / 1000),
+                                    author: info.author || 'Unknown Artist',
+                                    thumbnail: info.artworkUrl || null,
+                                    encoded: null,
+                                    encodedNode: null,
+                                    requester: {
+                                        id: requester.id,
+                                        tag: requester.tag || requester.username,
+                                        avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+                                    }
                                 }
                             };
-                        });
-                        return {
-                            type: 'playlist',
-                            title: (playlistData.info && playlistData.info.name) || 'Playlist',
-                            tracks
-                        };
-                    } else if (res.loadType === 'search' && Array.isArray(res.data) && res.data.length > 0) {
-                        const topTracks = res.data.slice(0, 5).map(t => {
-                            const info = t.info || {};
+                        } else if (res.loadType === 'playlist') {
+                            const playlistData = res.data;
+                            const tracks = (playlistData.tracks || []).map(t => {
+                                const info = t.info || {};
+                                return {
+                                    title: info.title || 'Unknown Title',
+                                    url: info.uri || cleanQuery,
+                                    duration: this.formatSeconds(Math.floor((info.length || 0) / 1000)),
+                                    seconds: Math.floor((info.length || 0) / 1000),
+                                    author: info.author || 'Unknown Artist',
+                                    thumbnail: info.artworkUrl || null,
+                                    encoded: null,
+                                    encodedNode: null,
+                                    requester: {
+                                        id: requester.id,
+                                        tag: requester.tag || requester.username,
+                                        avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+                                    }
+                                };
+                            });
                             return {
-                                title: info.title || 'Unknown Title',
-                                url: info.uri || `https://www.youtube.com/watch?v=${info.identifier}`,
-                                duration: this.formatSeconds(Math.floor((info.length || 0) / 1000)),
-                                seconds: Math.floor((info.length || 0) / 1000),
-                                author: info.author || 'Unknown Artist',
-                                thumbnail: info.artworkUrl || `https://img.youtube.com/vi/${info.identifier}/hqdefault.jpg`,
-                                encoded: t.encoded,
-                                encodedNode: node.name,
-                                requester: {
-                                    id: requester.id,
-                                    tag: requester.tag || requester.username,
-                                    avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
-                                }
+                                type: 'playlist',
+                                title: (playlistData.info && playlistData.info.name) || 'Playlist',
+                                tracks
                             };
-                        });
-                        return {
-                            type: 'search',
-                            results: topTracks,
-                            topTrack: topTracks[0]
-                        };
+                        }
                     }
+                } catch (_) {
+                    continue;
                 }
-            } catch (lavalinkErr) {
-                // Try next node if this one fails
-                continue;
             }
         }
 
-        // Fallback: yt-search + Lavalink encode
-        // Check if query is a playlist ID or playlist URL
-        const playlistMatch = cleanQuery.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+        // 2. Check if query is a YouTube playlist URL
         if (playlistMatch) {
             try {
                 const listId = playlistMatch[1];
@@ -981,6 +1016,7 @@ const musicManager = {
                         author: v.author ? v.author.name : (pResult.author ? pResult.author.name : 'Unknown Artist'),
                         thumbnail: v.thumbnail || null,
                         encoded: null,
+                        encodedNode: null,
                         requester: {
                             id: requester.id,
                             tag: requester.tag || requester.username,
@@ -998,48 +1034,93 @@ const musicManager = {
             }
         }
 
-        const searchResult = await yts(cleanQuery);
-        if (!searchResult || !searchResult.videos || searchResult.videos.length === 0) {
-            return { type: 'empty' };
-        }
-
-        // Attempt resolving first video via Lavalink if a healthy node is available
-        const firstVid = searchResult.videos[0];
-        let encodedTrack = null;
-        let encodedNode = null;
-        const fallbackNode = activeNodes[0] || null;
-        if (fallbackNode) {
+        // 3. If it's a single YouTube video URL (from user paste or web dashboard autocomplete), look up videoId via yt-search
+        const ytVideoIdMatch = cleanQuery.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        if (ytVideoIdMatch) {
             try {
-                const check = await fallbackNode.rest.resolve(firstVid.url);
-                if (check && check.data) {
-                    encodedTrack = Array.isArray(check.data) ? check.data[0]?.encoded : (check.data.encoded || check.data.tracks?.[0]?.encoded);
-                    if (encodedTrack) encodedNode = fallbackNode.name;
+                const v = await yts({ videoId: ytVideoIdMatch[1] });
+                if (v && v.title) {
+                    const track = {
+                        title: v.title,
+                        url: v.url || cleanQuery,
+                        duration: v.timestamp || this.formatSeconds(v.seconds || 0),
+                        seconds: v.seconds || 0,
+                        author: v.author ? v.author.name : 'Unknown Artist',
+                        thumbnail: v.thumbnail || `https://img.youtube.com/vi/${ytVideoIdMatch[1]}/hqdefault.jpg`,
+                        encoded: null,
+                        encodedNode: null,
+                        requester: {
+                            id: requester.id,
+                            tag: requester.tag || requester.username,
+                            avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+                        }
+                    };
+                    return { type: 'track', track };
                 }
             } catch (_) {}
         }
 
-        const topVideos = searchResult.videos.slice(0, 5).map((v, idx) => ({
-            title: v.title,
-            url: v.url,
-            duration: v.timestamp || this.formatSeconds(v.seconds),
-            seconds: v.seconds || 0,
-            author: v.author ? v.author.name : 'Unknown Artist',
-            thumbnail: v.thumbnail || null,
-            views: v.views ? v.views.toLocaleString() : 'N/A',
-            encoded: idx === 0 ? encodedTrack : null,
-            encodedNode: idx === 0 ? encodedNode : null,
-            requester: {
-                id: requester.id,
-                tag: requester.tag || requester.username,
-                avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+        // 4. Fast metadata search via yt-search (or Lavalink scsearch if yt-search returns nothing)
+        try {
+            const searchResult = await yts(cleanQuery);
+            if (searchResult && searchResult.videos && searchResult.videos.length > 0) {
+                const topVideos = searchResult.videos.slice(0, 5).map(v => ({
+                    title: v.title,
+                    url: v.url,
+                    duration: v.timestamp || this.formatSeconds(v.seconds),
+                    seconds: v.seconds || 0,
+                    author: v.author ? v.author.name : 'Unknown Artist',
+                    thumbnail: v.thumbnail || null,
+                    views: v.views ? v.views.toLocaleString() : 'N/A',
+                    encoded: null,
+                    encodedNode: null,
+                    requester: {
+                        id: requester.id,
+                        tag: requester.tag || requester.username,
+                        avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+                    }
+                }));
+                return {
+                    type: 'search',
+                    results: topVideos,
+                    topTrack: topVideos[0]
+                };
             }
-        }));
+        } catch (_) {}
 
-        return {
-            type: 'search',
-            results: topVideos,
-            topTrack: topVideos[0]
-        };
+        // 5. Final fallback: resolve directly via Lavalink SoundCloud search
+        for (const node of activeNodes) {
+            try {
+                const res = await node.rest.resolve(`scsearch:${cleanQuery}`);
+                if (res && res.loadType === 'search' && Array.isArray(res.data) && res.data.length > 0) {
+                    const topTracks = res.data.slice(0, 5).map(t => {
+                        const info = t.info || {};
+                        return {
+                            title: info.title || 'Unknown Title',
+                            url: info.uri || cleanQuery,
+                            duration: this.formatSeconds(Math.floor((info.length || 0) / 1000)),
+                            seconds: Math.floor((info.length || 0) / 1000),
+                            author: info.author || 'Unknown Artist',
+                            thumbnail: info.artworkUrl || null,
+                            encoded: t.encoded,
+                            encodedNode: node.name,
+                            requester: {
+                                id: requester.id,
+                                tag: requester.tag || requester.username,
+                                avatar: requester.displayAvatarURL ? requester.displayAvatarURL() : null
+                            }
+                        };
+                    });
+                    return {
+                        type: 'search',
+                        results: topTracks,
+                        topTrack: topTracks[0]
+                    };
+                }
+            } catch (_) {}
+        }
+
+        return { type: 'empty' };
     },
 
     formatSeconds(sec) {

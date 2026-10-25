@@ -26,7 +26,8 @@ const lyricsService = {
         // Remove bracketed/parenthesized noise like (Official Video), [Lyrics], (feat. X), [4K Remaster]
         title = title
             .replace(/\(.*?\)|\[.*?\]|\{.*?\}/g, ' ')
-            .replace(/\b(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video|visualizer)|lyric\s*video|lyrics?|visualizer|audio|video|hd|hq|4k|remastered|explicit|clean\s*version|slowed|reverb|sped\s*up|nightcore|bass\s*boosted|prod\.?\s+by\s+\S+)\b/gi, ' ')
+            .replace(/['"“”‘’]/g, '')
+            .replace(/\b(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video|visualizer)|live\s*(?:at|from|in|on|performance|session).*|summertime\s*ball.*|lyric\s*video|lyrics?|visualizer|audio|video|hd|hq|4k|remastered|explicit|clean\s*version|slowed|reverb|sped\s*up|nightcore|bass\s*boosted|prod\.?\s+by\s+\S+)\b/gi, ' ')
             .replace(/\b(?:ft\.?|feat\.?|featuring)\s+[^-–—|]+/gi, ' ')
             .replace(/[|•"_]/g, ' ')
             .replace(/\s+/g, ' ')
