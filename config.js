@@ -143,15 +143,15 @@ module.exports = {
             secure: true
         },
         {
-            name: 'Trinium-NodeLink',
-            url: 'nodelink.triniumhost.com:443',
+            name: 'Trinium-SSL',
+            url: 'lavalink-v4.triniumhost.com:443',
             auth: 'free',
             secure: true
         },
         {
-            name: 'Nazha-SSL',
-            url: 'lavalink.nazha.online:443',
-            auth: 'nazhafreelava',
+            name: 'Trinium-NodeLink',
+            url: 'nodelink.triniumhost.com:443',
+            auth: 'free',
             secure: true
         }
     ]

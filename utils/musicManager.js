@@ -199,16 +199,17 @@ class GuildMusicQueue {
         this.textChannel = textChannel;
         this.voiceChannelId = voiceChannel.id;
         this.voiceChannelName = voiceChannel.name;
+        this.voiceChannel = voiceChannel;
 
         if (!musicManager.shoukaku) {
             throw new Error('Lavalink audio client is not initialized or still connecting.');
         }
 
         if (!this.player) {
-            // Try each connected node in turn; some public nodes reject sessions with 403
-            const nodes = Array.from(musicManager.shoukaku.nodes.values()).filter(n => n.state === 1);
+            // Try each healthy connected node in turn; some public nodes reject sessions with 403
+            const nodes = musicManager.getHealthyNodes();
             if (nodes.length === 0) {
-                throw new Error('No Lavalink nodes are connected right now. Try again in a few seconds.');
+                throw new Error('No healthy Lavalink nodes are available right now. Try again in a few seconds.');
             }
 
             let lastErr = null;
@@ -226,7 +227,8 @@ class GuildMusicQueue {
                     break;
                 } catch (err) {
                     lastErr = err;
-                    console.warn(`[LAVALINK] Node "${node.name}" rejected voice join (${err.status || err.message}), trying next node...`);
+                    console.warn(`[LAVALINK] Node "${node.name}" rejected voice join (${err.status || err.message}), marking bad and trying next node...`);
+                    musicManager.markBad(node.name);
                     try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
                     this.player = null;
                 }
@@ -240,7 +242,7 @@ class GuildMusicQueue {
         return this.player;
     }
 
-    async playTrack(track, seekSeconds = 0) {
+    async playTrack(track, seekSeconds = 0, _retried = false) {
         this.cancelDisconnect();
         this.currentTrack = track;
         this.isPlaying = true;
@@ -256,17 +258,36 @@ class GuildMusicQueue {
                 throw new Error('Voice player is not connected.');
             }
 
-            // If track does not have an encoded string yet (e.g. from yt-search playlist fallback), resolve it on the fly
-            let trackEncoded = track.encoded;
+            // Ensure track is encoded by the active player's own node (or re-encode on failover)
+            const playerNodeName = this.player.node ? this.player.node.name : null;
+            let trackEncoded = (_retried || (track.encodedNode && playerNodeName && track.encodedNode !== playerNodeName))
+                ? null
+                : track.encoded;
+
             if (!trackEncoded) {
-                const activeNodes = musicManager.shoukaku ? Array.from(musicManager.shoukaku.nodes.values()).filter(n => n.state === 2 || n.state === 1) : [];
-                for (const node of activeNodes) {
+                const candidateNodes = [];
+                if (this.player.node) candidateNodes.push(this.player.node);
+                for (const n of musicManager.getHealthyNodes()) {
+                    if (!candidateNodes.includes(n)) candidateNodes.push(n);
+                }
+
+                for (const node of candidateNodes) {
                     try {
-                        const res = await node.rest.resolve(track.url);
+                        let queryTarget = track.url;
+                        if (!queryTarget || (!queryTarget.startsWith('http://') && !queryTarget.startsWith('https://'))) {
+                            queryTarget = `ytsearch:${track.title} ${track.author || ''}`.trim();
+                        }
+                        let res = await node.rest.resolve(queryTarget);
+                        if ((!res || !res.data || res.loadType === 'empty' || res.loadType === 'error') && queryTarget.startsWith('http')) {
+                            res = await node.rest.resolve(`ytsearch:${track.title} ${track.author || ''}`.trim());
+                        }
                         if (res && res.data) {
-                            trackEncoded = Array.isArray(res.data) ? res.data[0]?.encoded : (res.data.encoded || res.data.tracks?.[0]?.encoded);
+                            trackEncoded = Array.isArray(res.data)
+                                ? res.data[0]?.encoded
+                                : (res.data.encoded || res.data.tracks?.[0]?.encoded);
                             if (trackEncoded) {
                                 track.encoded = trackEncoded;
+                                track.encodedNode = node.name;
                                 break;
                             }
                         }
@@ -288,6 +309,23 @@ class GuildMusicQueue {
             await this.player.setGlobalVolume(this.volume);
             await this.applyFilter(this.activeFilter, this.speed, false);
         } catch (err) {
+            // The node accepted the voice join but refuses to play (403 / 5xx / timeout):
+            // blacklist it for a while, move this guild to another node, and retry once.
+            const nodeFailure = err && (err.status === 403 || err.status >= 500 || err.name === 'RestError');
+            if (!_retried && nodeFailure && this.voiceChannel && musicManager.shoukaku) {
+                const badName = this.player && this.player.node ? this.player.node.name : null;
+                console.warn(`[LAVALINK] Node "${badName || 'unknown'}" failed to play (${err.status || err.message}). Failing over...`);
+                if (badName) musicManager.markBad(badName);
+                try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
+                this.player = null;
+                try {
+                    await this.connect(this.voiceChannel, this.textChannel);
+                    return this.playTrack(track, seekSeconds, true);
+                } catch (failoverErr) {
+                    err = failoverErr;
+                }
+            }
+
             console.error('[PLAY TRACK ERROR]', err);
             if (this.textChannel) {
                 this.textChannel.send(`❌ Failed to load audio for **${track.title}**: ${err.message}`).catch(() => {});
@@ -450,6 +488,26 @@ const musicManager = {
     queues: new Map(),
     clientRef: null,
     shoukaku: null,
+    badNodes: new Map(),
+
+    markBad(nodeName, ttlMs = 180000) {
+        if (!nodeName) return;
+        this.badNodes.set(nodeName, Date.now() + ttlMs);
+    },
+
+    getHealthyNodes() {
+        if (!this.shoukaku) return [];
+        const now = Date.now();
+        for (const [name, exp] of this.badNodes.entries()) {
+            if (now >= exp) this.badNodes.delete(name);
+        }
+        const connected = Array.from(this.shoukaku.nodes.values()).filter(n => n.state === 1);
+        const healthy = connected.filter(n => !this.badNodes.has(n.name));
+        if (healthy.length > 0) return healthy;
+        // If all connected nodes were marked bad, reset blacklist so we can still attempt playback
+        this.badNodes.clear();
+        return connected;
+    },
 
     init(client) {
         this.clientRef = client;
@@ -524,8 +582,8 @@ const musicManager = {
     async resolveQuery(rawQuery, requester) {
         let cleanQuery = rawQuery.trim();
 
-        // Node check - iterate connected nodes
-        const activeNodes = this.shoukaku ? Array.from(this.shoukaku.nodes.values()).filter(n => n.state === 2 || n.state === 1) : [];
+        // Node check - iterate healthy connected nodes
+        const activeNodes = this.getHealthyNodes();
 
         for (const node of activeNodes) {
             try {
@@ -547,6 +605,7 @@ const musicManager = {
                             author: info.author || 'Unknown Artist',
                             thumbnail: info.artworkUrl || `https://img.youtube.com/vi/${info.identifier}/hqdefault.jpg`,
                             encoded: t.encoded,
+                            encodedNode: node.name,
                             requester: {
                                 id: requester.id,
                                 tag: requester.tag || requester.username,
@@ -566,6 +625,7 @@ const musicManager = {
                                 author: info.author || 'Unknown Artist',
                                 thumbnail: info.artworkUrl || `https://img.youtube.com/vi/${info.identifier}/hqdefault.jpg`,
                                 encoded: t.encoded,
+                                encodedNode: node.name,
                                 requester: {
                                     id: requester.id,
                                     tag: requester.tag || requester.username,
@@ -589,6 +649,7 @@ const musicManager = {
                                 author: info.author || 'Unknown Artist',
                                 thumbnail: info.artworkUrl || `https://img.youtube.com/vi/${info.identifier}/hqdefault.jpg`,
                                 encoded: t.encoded,
+                                encodedNode: node.name,
                                 requester: {
                                     id: requester.id,
                                     tag: requester.tag || requester.username,
@@ -647,14 +708,17 @@ const musicManager = {
             return { type: 'empty' };
         }
 
-        // Attempt resolving first video via Lavalink if node is available
+        // Attempt resolving first video via Lavalink if a healthy node is available
         const firstVid = searchResult.videos[0];
         let encodedTrack = null;
-        if (node) {
+        let encodedNode = null;
+        const fallbackNode = activeNodes[0] || null;
+        if (fallbackNode) {
             try {
-                const check = await node.rest.resolve(firstVid.url);
+                const check = await fallbackNode.rest.resolve(firstVid.url);
                 if (check && check.data) {
                     encodedTrack = Array.isArray(check.data) ? check.data[0]?.encoded : (check.data.encoded || check.data.tracks?.[0]?.encoded);
+                    if (encodedTrack) encodedNode = fallbackNode.name;
                 }
             } catch (_) {}
         }
@@ -668,6 +732,7 @@ const musicManager = {
             thumbnail: v.thumbnail || null,
             views: v.views ? v.views.toLocaleString() : 'N/A',
             encoded: idx === 0 ? encodedTrack : null,
+            encodedNode: idx === 0 ? encodedNode : null,
             requester: {
                 id: requester.id,
                 tag: requester.tag || requester.username,
