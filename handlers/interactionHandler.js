@@ -415,6 +415,176 @@ async function handleInteraction(interaction) {
             return interaction.update(renderData);
         }
 
+        // Job Offer System - Candidate Accepts Offer
+        if (customId.startsWith('job_offer_accept_')) {
+            const offerId = customId.replace('job_offer_accept_', '');
+            const offer = await db.getJobOffer(offerId);
+
+            if (!offer) {
+                return interaction.reply({
+                    content: '❌ Job offer not found in the database.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (interaction.user.id !== offer.user_id) {
+                return interaction.reply({
+                    content: '🚫 This job offer was issued to someone else.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (offer.status !== 'PENDING') {
+                return interaction.reply({
+                    content: `⚠️ This job offer is no longer pending (status: **${offer.status}**).`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            const guild = interaction.client.guilds.cache.get(config.guildId) || interaction.guild;
+            let member = null;
+            if (guild) {
+                member = await guild.members.fetch(offer.user_id).catch(() => null);
+            }
+
+            if (member) {
+                const rolesToAdd = [offer.role_id];
+                if (config.roles.staff && !member.roles.cache.has(config.roles.staff)) {
+                    rolesToAdd.push(config.roles.staff);
+                }
+                try {
+                    await member.roles.add(rolesToAdd, `Accepted Job Offer #${offer.id} extended by ${offer.offerer_tag}`);
+                } catch (roleErr) {
+                    console.error('[JOB OFFER ROLE ADD ERROR]', roleErr);
+                }
+            }
+
+            // Initialize or update staff activity profile in DB
+            const dbData = db.getData();
+            if (!dbData.staff_activity) dbData.staff_activity = {};
+            if (!dbData.staff_activity[offer.user_id]) {
+                dbData.staff_activity[offer.user_id] = {
+                    shifts_hosted: 0,
+                    shifts_attended: 0,
+                    trainings_hosted: 0,
+                    hired_at: new Date().toISOString(),
+                    hired_by: offer.offerer_id,
+                    hired_role: offer.role_id,
+                    probation_until: offer.probation_days > 0
+                        ? new Date(Date.now() + offer.probation_days * 86400000).toISOString()
+                        : null
+                };
+            }
+            db.save();
+
+            // Update offer status
+            const updatedOffer = await db.updateJobOffer(offer.id, {
+                status: 'ACCEPTED',
+                accepted_at: new Date().toISOString()
+            });
+
+            // Update original offer message in place
+            const { buildJobOfferEmbed, buildJobOfferButtons } = require('../commands/jobOffer');
+            try {
+                const updatedEmbed = buildJobOfferEmbed(updatedOffer, guild);
+                const updatedButtons = buildJobOfferButtons(offer.id, 'ACCEPTED');
+                await interaction.message.edit({ embeds: [updatedEmbed], components: [updatedButtons] }).catch(() => null);
+            } catch (_) {}
+
+            // Post public announcement to hiring channel
+            const announceChId = config.channels.hiringAnnouncements || '1559311276176441434';
+            if (guild && announceChId) {
+                const announceCh = guild.channels.cache.get(announceChId) || await guild.channels.fetch(announceChId).catch(() => null);
+                if (announceCh) {
+                    const publicWelcomeEmbed = new EmbedBuilder()
+                        .setTitle('🎉 New Colleague Joined — Welcome to Grandway Shopping!')
+                        .setDescription(
+                            `Please give a warm welcome to our newest colleague, <@${offer.user_id}>, who has officially **ACCEPTED** the job offer for **${offer.position_title}**!\n\n` +
+                            `• **Assigned Role:** <@&${offer.role_id}>\n` +
+                            `• **Department:** ${offer.department || 'Store Operations'}\n` +
+                            `• **Hired By:** <@${offer.offerer_id}>\n` +
+                            (offer.probation_days > 0 ? `• **Probationary Period:** \`${offer.probation_days} Days\`\n\n` : '\n') +
+                            `Head over to <#${config.channels.staffHeadquarters || '1505203529403596922'}> to welcome them aboard! 🛒`
+                        )
+                        .setColor(0x2ECC71)
+                        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+                        .setFooter({ text: `Grandway Shopping Human Resources • Offer #${offer.id}` })
+                        .setTimestamp();
+
+                    await announceCh.send({
+                        content: `<@&${config.roles.staff}> 🛒 **NEW COLLEAGUE JOINED**`,
+                        embeds: [publicWelcomeEmbed]
+                    }).catch(() => null);
+                }
+            }
+
+            // Notify hiring manager via DM
+            try {
+                const hiringManager = await interaction.client.users.fetch(offer.offerer_id).catch(() => null);
+                if (hiringManager) {
+                    const managerEmbed = new EmbedBuilder()
+                        .setTitle('🎉 Job Offer Accepted!')
+                        .setDescription(`Great news! <@${offer.user_id}> (\`${offer.user_tag}\`) has officially **ACCEPTED** your job offer for **${offer.position_title}**!`)
+                        .addFields(
+                            { name: '🆔 Offer ID', value: `\`#${offer.id}\``, inline: true },
+                            { name: '🏷️ Role', value: `<@&${offer.role_id}>`, inline: true },
+                            { name: '🏬 Department', value: offer.department, inline: true }
+                        )
+                        .setColor(0x2ECC71)
+                        .setTimestamp();
+                    await hiringManager.send({ embeds: [managerEmbed] }).catch(() => null);
+                }
+            } catch (_) {}
+
+            return interaction.editReply({
+                content: `🎉 **Congratulations & Welcome aboard!** You have accepted the job offer for **${offer.position_title}**! Your roles and staff profile have been activated.`
+            });
+        }
+
+        // Job Offer System - Candidate Declines (Open Modal)
+        if (customId.startsWith('job_offer_decline_')) {
+            const offerId = customId.replace('job_offer_decline_', '');
+            const offer = await db.getJobOffer(offerId);
+
+            if (!offer) {
+                return interaction.reply({
+                    content: '❌ Job offer not found in the database.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (interaction.user.id !== offer.user_id) {
+                return interaction.reply({
+                    content: '🚫 This job offer was issued to someone else.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (offer.status !== 'PENDING') {
+                return interaction.reply({
+                    content: `⚠️ This job offer is no longer pending (status: **${offer.status}**).`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const modal = new ModalBuilder()
+                .setCustomId(`modal_job_offer_decline_${offerId}`)
+                .setTitle('Decline Employment Offer');
+
+            const reasonInput = new TextInputBuilder()
+                .setCustomId('decline_reason')
+                .setLabel('Reason for declining (optional):')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('e.g. Current availability, looking for a different role, etc.')
+                .setRequired(false)
+                .setMaxLength(300);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+            return interaction.showModal(modal);
+        }
+
         // Verification Center "Verify Account" Prompt Button
         if (customId === 'btn_start_verification') {
             const modal = new ModalBuilder()
@@ -2076,6 +2246,67 @@ async function handleInteraction(interaction) {
     // 2. MODAL SUBMISSIONS
     if (interaction.isModalSubmit()) {
         const customId = interaction.customId;
+
+        // Job Offer System - Candidate Decline Modal Submit
+        if (customId.startsWith('modal_job_offer_decline_')) {
+            const offerId = customId.replace('modal_job_offer_decline_', '');
+            const offer = await db.getJobOffer(offerId);
+
+            if (!offer) {
+                return interaction.reply({
+                    content: '❌ Job offer not found in the database.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (interaction.user.id !== offer.user_id) {
+                return interaction.reply({
+                    content: '🚫 This job offer was issued to someone else.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            const reason = interaction.fields.getTextInputValue('decline_reason') || 'No specific reason provided';
+
+            const updatedOffer = await db.updateJobOffer(offer.id, {
+                status: 'DECLINED',
+                declined_at: new Date().toISOString(),
+                decline_reason: reason
+            });
+
+            // Update original offer message in place
+            const guild = interaction.client.guilds.cache.get(config.guildId) || interaction.guild;
+            const { buildJobOfferEmbed, buildJobOfferButtons } = require('../commands/jobOffer');
+            try {
+                const updatedEmbed = buildJobOfferEmbed(updatedOffer, guild);
+                const updatedButtons = buildJobOfferButtons(offer.id, 'DECLINED');
+                await interaction.message.edit({ embeds: [updatedEmbed], components: [updatedButtons] }).catch(() => null);
+            } catch (_) {}
+
+            // Notify hiring manager via DM
+            try {
+                const hiringManager = await interaction.client.users.fetch(offer.offerer_id).catch(() => null);
+                if (hiringManager) {
+                    const managerEmbed = new EmbedBuilder()
+                        .setTitle('ℹ️ Job Offer Declined')
+                        .setDescription(`<@${offer.user_id}> (\`${offer.user_tag}\`) has **DECLINED** the job offer for **${offer.position_title}**.`)
+                        .addFields(
+                            { name: '🆔 Offer ID', value: `\`#${offer.id}\``, inline: true },
+                            { name: '🏷️ Role', value: `<@&${offer.role_id}>`, inline: true },
+                            { name: '📝 Reason Given', value: `*"${reason}"*`, inline: false }
+                        )
+                        .setColor(0xE74C3C)
+                        .setTimestamp();
+                    await hiringManager.send({ embeds: [managerEmbed] }).catch(() => null);
+                }
+            } catch (_) {}
+
+            return interaction.editReply({
+                content: `👋 You have declined the job offer for **${offer.position_title}**. We thank you for considering Grandway Shopping and wish you the best!`
+            });
+        }
 
         // Submit LOA Modal
         if (customId === 'modal_loa_request') {

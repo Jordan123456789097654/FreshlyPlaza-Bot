@@ -31,7 +31,8 @@ let dbData = {
     auto_roles: [],
     music_playlists: {},
     music_favorites: {},
-    music_settings: {}
+    music_settings: {},
+    job_offers: []
 };
 
 function saveDb() {
@@ -1294,6 +1295,57 @@ const db = {
         };
         saveDb();
         return dbData.music_settings[guildId];
+    },
+
+    // Job Offer System Helpers
+    async createJobOffer(offerData) {
+        loadDb();
+        if (!dbData.job_offers) dbData.job_offers = [];
+        const offerId = 'JO-' + Math.floor(100000 + Math.random() * 900000);
+        const record = {
+            id: offerId,
+            ...offerData,
+            status: 'PENDING',
+            created_at: new Date().toISOString()
+        };
+        dbData.job_offers.push(record);
+        saveDb();
+        return record;
+    },
+
+    async getJobOffer(offerId) {
+        loadDb();
+        if (!dbData.job_offers) dbData.job_offers = [];
+        return dbData.job_offers.find(o => o.id === offerId) || null;
+    },
+
+    async updateJobOffer(offerId, updates) {
+        loadDb();
+        if (!dbData.job_offers) dbData.job_offers = [];
+        const idx = dbData.job_offers.findIndex(o => o.id === offerId);
+        if (idx === -1) return null;
+        dbData.job_offers[idx] = {
+            ...dbData.job_offers[idx],
+            ...updates,
+            updated_at: new Date().toISOString()
+        };
+        saveDb();
+        return dbData.job_offers[idx];
+    },
+
+    async getUserJobOffers(userId) {
+        loadDb();
+        if (!dbData.job_offers) dbData.job_offers = [];
+        return dbData.job_offers.filter(o => o.user_id === userId);
+    },
+
+    async getActiveJobOffers(userId = null) {
+        loadDb();
+        if (!dbData.job_offers) dbData.job_offers = [];
+        if (userId) {
+            return dbData.job_offers.filter(o => o.user_id === userId && o.status === 'PENDING');
+        }
+        return dbData.job_offers.filter(o => o.status === 'PENDING');
     }
 };
 
