@@ -432,7 +432,6 @@ class GuildMusicQueue {
             let lastErr = null;
             for (const node of nodes) {
                 try {
-                    try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
                     musicManager.preferredNodeName = node.name;
                     this.player = await musicManager.shoukaku.joinVoiceChannel({
                         guildId: this.guildId,
@@ -452,6 +451,8 @@ class GuildMusicQueue {
                     musicManager.markBad(actualFailedNode);
                     try { await musicManager.shoukaku.leaveVoiceChannel(this.guildId); } catch (_) {}
                     this.player = null;
+                    // Give Discord's gateway 600ms to settle before next connection attempt
+                    await new Promise(r => setTimeout(r, 600));
                 }
             }
 

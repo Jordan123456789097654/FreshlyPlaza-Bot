@@ -209,7 +209,14 @@ class RadioManager {
         queue.cancelDisconnect();
 
         // Connect voice
-        await queue.connect(voiceChannel, textChannel);
+        try {
+            await queue.connect(voiceChannel, textChannel);
+        } catch (connErr) {
+            queue.isRadioMode = false;
+            queue.radioStationKey = null;
+            this.activeRadios.delete(guild.id);
+            throw connErr;
+        }
 
         // Record active radio state
         this.activeRadios.set(guild.id, {

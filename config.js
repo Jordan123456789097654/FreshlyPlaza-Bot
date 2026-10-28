@@ -138,21 +138,21 @@ module.exports = {
     // Multi-node pool with automatic failover across top verified v4 hosts
     lavalinkNodes: [
         {
-            name: 'MilloHost-SSL',
-            url: 'lava-v4.millohost.my.id:443',
-            auth: 'https://discord.gg/mjS5J2K3ep',
+            name: 'Nazha-Global',
+            url: 'lavalink.nazha.online:443',
+            auth: 'nazhafreelava',
             secure: true
         },
         {
             name: 'Serenetia-SSL',
             url: 'lavalinkv4.serenetia.com:443',
-            auth: 'https://dsc.gg/ajidevserver',
+            auth: 'https://seretia.link/discord',
             secure: true
         },
         {
-            name: 'Jirayu-SSL',
-            url: 'lavalink.jirayu.net:443',
-            auth: 'youshallnotpass',
+            name: 'MilloHost-SSL',
+            url: 'lava-v4.millohost.my.id:443',
+            auth: 'https://discord.gg/mjS5J2K3ep',
             secure: true
         }
     ]
