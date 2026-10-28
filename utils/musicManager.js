@@ -391,9 +391,18 @@ class GuildMusicQueue {
 
         if (!this.player) {
             // Try each healthy connected node in turn; some public nodes reject sessions with 403
-            const nodes = musicManager.getHealthyNodes();
+            let nodes = musicManager.getHealthyNodes();
             if (nodes.length === 0) {
-                throw new Error('No healthy Lavalink nodes are available right now. Try again in a few seconds.');
+                // If nodes are still connecting on bot startup, wait up to 3 seconds for a node to become ready
+                if (musicManager.shoukaku && musicManager.shoukaku.nodes.size > 0) {
+                    await new Promise(r => setTimeout(r, 1500));
+                    nodes = musicManager.getHealthyNodes();
+                }
+            }
+
+            if (nodes.length === 0) {
+                const totalNodes = musicManager.shoukaku ? musicManager.shoukaku.nodes.size : 0;
+                throw new Error(`No Lavalink audio nodes are connected yet (${totalNodes} configured). Please wait a moment while the bot establishes the audio connection.`);
             }
 
             let lastErr = null;
@@ -866,7 +875,7 @@ const musicManager = {
     badNodes: new Map(),
     preferredNodeName: null,
 
-    markBad(nodeName, ttlMs = 180000) {
+    markBad(nodeName, ttlMs = 45000) {
         if (!nodeName) return;
         this.badNodes.set(nodeName, Date.now() + ttlMs);
     },
@@ -880,7 +889,7 @@ const musicManager = {
         const connected = Array.from(this.shoukaku.nodes.values()).filter(n => n.state === 1);
         const healthy = connected.filter(n => !this.badNodes.has(n.name));
         if (healthy.length > 0) return healthy;
-        // If all connected nodes were marked bad, reset blacklist so we can still attempt playback
+        // If all connected nodes were quarantined, clear quarantine immediately so playback can still be attempted
         this.badNodes.clear();
         return connected;
     },
