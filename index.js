@@ -603,10 +603,39 @@ client.once('clientReady', async () => {
     };
     setTimeout(cleanupExpiredRecordings, 60000);
     setInterval(cleanupExpiredRecordings, 12 * 60 * 60 * 1000); // Purge check every 12 hours
+
+    // 📻 24/7 Dedicated Radio Channel Auto-Broadcast
+    const { radioManager } = require('./utils/musicRadio');
+    const musicManager = require('./utils/musicManager');
+    setTimeout(() => {
+        radioManager.ensureDedicatedRadio(client, musicManager, config);
+    }, 12000); // Allow Lavalink nodes to finish connecting first
+    setInterval(() => {
+        radioManager.ensureDedicatedRadio(client, musicManager, config);
+    }, 60000); // Continuous health check to keep 24/7 radio live
 });
 
 // 🎫 Automatic Ticket Roles Auto-Assignment for HR+ & Staff
 const SUPPORT_ROLE_KEYS = ['supportGeneral', 'supportReport', 'supportManagement', 'supportTechnical', 'supportAppeals'];
+
+// 📻 Auto-reconnect / listener auto-start for Radio Voice Channels
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    try {
+        const radioChannelId = config.channels && config.channels.musicRadioVoice;
+        if (!radioChannelId) return;
+
+        // If someone joins the radio channel and the bot is not in it or not playing
+        if (newState.channelId === radioChannelId && newState.member && !newState.member.user.bot) {
+            const guild = newState.guild;
+            const musicManager = require('./utils/musicManager');
+            const queue = musicManager.getQueue(guild.id);
+            if (!queue || !queue.isPlaying || !queue.player) {
+                const { radioManager } = require('./utils/musicRadio');
+                await radioManager.ensureDedicatedRadio(client, musicManager, config);
+            }
+        }
+    } catch (_) {}
+});
 
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
     try {
@@ -1822,114 +1851,38 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
             try {
                 const { station } = JSON.parse(body);
-                const STATIONS = {
-                    store_hits: [
-                        'The Weeknd - Blinding Lights',
-                        'Dua Lipa - Levitating',
-                        'Bruno Mars - 24K Magic',
-                        'Calvin Harris - Feel So Close',
-                        'Post Malone - Circles',
-                        'Daft Punk - Get Lucky'
-                    ],
-                    throwbacks_2010s: [
-                        'Avicii - Wake Me Up',
-                        'Pitbull - Give Me Everything',
-                        'Katy Perry - Teenage Dream',
-                        'Rihanna - We Found Love',
-                        'OneRepublic - Counting Stars',
-                        'David Guetta - Titanium'
-                    ],
-                    lofi_chill: [
-                        'Joji - Glimpse of Us',
-                        'Rex Orange County - Best Friend',
-                        'Daniel Caesar - Best Part',
-                        'Frank Ocean - Pink + White',
-                        'Kali Uchis - Telepatia',
-                        'Billie Eilish - Birds of a Feather'
-                    ],
-                    late_night_rnb: [
-                        'SZA - Snooze',
-                        'The Weeknd - Die For You',
-                        'Drake - Passionfruit',
-                        'Bryson Tiller - Exchange',
-                        'Chris Brown - Under The Influence',
-                        'Miguel - Sure Thing'
-                    ],
-                    hype_gym: [
-                        'Travis Scott - FE!N',
-                        'Kanye West - Stronger',
-                        'Eminem - Till I Collapse',
-                        'Kendrick Lamar - HUMBLE.',
-                        '21 Savage - redrum',
-                        'Playboi Carti - Sky'
-                    ],
-                    pop_party: [
-                        'Sabrina Carpenter - Espresso',
-                        'Taylor Swift - Cruel Summer',
-                        'Lady Gaga - Just Dance',
-                        'Usher - Yeah!',
-                        'Flo Rida - Low',
-                        'Black Eyed Peas - I Gotta Feeling'
-                    ]
-                };
-                const tracksToLoad = STATIONS[station];
-                if (!tracksToLoad) {
-                    res.writeHead(400, { 'Content-Type': 'application/json' });
-                    return res.end(JSON.stringify({ error: 'Unknown station' }));
-                }
-
+                const { radioManager } = require('./utils/musicRadio');
                 const musicManager = require('./utils/musicManager');
                 const guild = client.guilds.cache.get(config.guildId);
                 if (!guild) {
                     res.writeHead(500, { 'Content-Type': 'application/json' });
                     return res.end(JSON.stringify({ error: 'Guild unavailable' }));
                 }
-                const queue = musicManager.getQueue(guild.id);
 
-                if (!queue.player) {
-                    const activeUserVc = guild.channels.cache.find(c => c.isVoiceBased() && c.members.filter(m => !m.user.bot).size > 0);
-                    const configMusicVc = config.channels.musicLoungeVoice ? guild.channels.cache.get(config.channels.musicLoungeVoice) : null;
-                    const defaultVc = activeUserVc
-                        || configMusicVc
-                        || guild.channels.cache.find(c => c.isVoiceBased() && c.name.toLowerCase().includes('music'))
-                        || guild.channels.cache.find(c => c.isVoiceBased());
-                    const defaultText = (config.channels.musicCommands && guild.channels.cache.get(config.channels.musicCommands))
-                        || guild.channels.cache.find(c => c.name === 'music-commands')
-                        || guild.channels.cache.find(c => c.isTextBased());
-                    if (!defaultVc) {
-                        res.writeHead(400, { 'Content-Type': 'application/json' });
-                        return res.end(JSON.stringify({ error: 'No voice channel found in server' }));
-                    }
-                    await queue.connect(defaultVc, defaultText);
+                const targetVc = (config.channels.musicRadioVoice && guild.channels.cache.get(config.channels.musicRadioVoice))
+                    || guild.channels.cache.find(c => c.isVoiceBased() && c.members.filter(m => !m.user.bot).size > 0)
+                    || (config.channels.musicLoungeVoice && guild.channels.cache.get(config.channels.musicLoungeVoice))
+                    || guild.channels.cache.find(c => c.isVoiceBased());
+                const defaultText = (config.channels.musicCommands && guild.channels.cache.get(config.channels.musicCommands))
+                    || guild.channels.cache.find(c => c.name === 'music-commands')
+                    || guild.channels.cache.find(c => c.isTextBased());
+
+                if (!targetVc) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'No voice channel found' }));
                 }
 
-                // Resolve the first song immediately to start playback fast, then resolve the rest in background
-                const shuffled = [...tracksToLoad].sort(() => Math.random() - 0.5);
-                const firstRes = await musicManager.resolveQuery(shuffled[0], { id: 'RADIO', tag: '📻 Grandway Radio' });
-                const firstTrack = firstRes.track || firstRes.topTrack;
-                if (firstTrack) {
-                    if (queue.isPlaying || queue.currentTrack) {
-                        queue.queue.push(firstTrack);
-                    } else {
-                        await queue.playTrack(firstTrack);
-                    }
-                }
+                const result = await radioManager.startRadio({
+                    guild,
+                    voiceChannel: targetVc,
+                    textChannel: defaultText,
+                    stationKey: station || 'store_hits',
+                    requester: { id: 'DASHBOARD', tag: '🎛️ Command Center' },
+                    musicManager
+                });
 
-                // Background-resolve the remaining station tracks
-                (async () => {
-                    for (let i = 1; i < shuffled.length; i++) {
-                        try {
-                            const r = await musicManager.resolveQuery(shuffled[i], { id: 'RADIO', tag: '📻 Grandway Radio' });
-                            const t = r.track || r.topTrack;
-                            if (t) queue.queue.push(t);
-                        } catch (_) {}
-                    }
-                    if (queue.preEncodeNextTrack) queue.preEncodeNextTrack();
-                })();
-
-                queue.autoplay = true;
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ success: true, count: shuffled.length }));
+                return res.end(JSON.stringify({ success: true, station: result.station.name, channel: targetVc.name }));
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ error: e.message }));
@@ -2028,6 +1981,7 @@ const server = http.createServer(async (req, res) => {
     // 7.9. Music Live State API (single source of truth for the live dashboard; polled, never reloaded)
     if (pathname === '/api/music/state') {
         const musicManager = require('./utils/musicManager');
+        const { radioManager } = require('./utils/musicRadio');
         const guild = client.guilds.cache.get(config.guildId);
         const queue = guild ? musicManager.getQueue(guild.id) : null;
 
@@ -2067,6 +2021,8 @@ const server = http.createServer(async (req, res) => {
             nodes: musicManager.getNodesStatus ? musicManager.getNodesStatus() : [],
             isPlaying,
             isPaused,
+            isRadio: !!(queue && queue.isRadioMode),
+            radioStation: queue && queue.radioStationKey ? queue.radioStationKey : null,
             autoplay: !!(queue && queue.autoplay),
             current: isPlaying ? slim(queue.currentTrack) : null,
             elapsed: queue ? queue.getPlaybackSeconds() : 0,

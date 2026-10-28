@@ -393,13 +393,15 @@ h3 { font-size: 14.5px; font-weight: 800; letter-spacing: -0.2px; }
     </div>
 
     <div class="card stations-bar">
-        <span class="stations-lbl">📻 Instant Vibe Stations:</span>
+        <span class="stations-lbl">📻 24/7 Vibe Stations:</span>
         <button class="station-pill" data-station="store_hits">🛒 Store Hits</button>
         <button class="station-pill" data-station="lofi_chill">☕ Lo-Fi &amp; Chill</button>
-        <button class="station-pill" data-station="throwbacks_2010s">🔥 2010s Throwbacks</button>
+        <button class="station-pill" data-station="throwbacks_2010s">🔥 2010s Anthems</button>
         <button class="station-pill" data-station="late_night_rnb">🌙 Late Night R&amp;B</button>
-        <button class="station-pill" data-station="hype_gym">🎧 Hype / Phonk</button>
+        <button class="station-pill" data-station="hype_gym">🎧 Hype / Gym</button>
         <button class="station-pill" data-station="pop_party">✨ Pop Party</button>
+        <button class="station-pill" data-station="jazz_cafe">🎷 Jazz Café</button>
+        <button class="station-pill" data-station="synthwave">🌆 80s Synthwave</button>
     </div>
 
     <div class="grid">

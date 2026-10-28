@@ -534,7 +534,30 @@ module.exports = [
     {
         data: new SlashCommandBuilder()
             .setName('music-dj')
-            .setDescription('Configure DJ role requirements, track limits, and sleep timers')
+            .setDescription('Configure DJ role requirements, track limits, sleep timers, and 24/7 radio')
+            .addSubcommand(sub =>
+                sub.setName('radio')
+                    .setDescription('Start or tune the 24/7 Grandway Radio station in your voice channel')
+                    .addStringOption(opt =>
+                        opt.setName('station')
+                            .setDescription('Select the radio vibe station')
+                            .setRequired(true)
+                            .addChoices(
+                                { name: '🛒 Grandway Store Hits (Pop / Upbeat)', value: 'store_hits' },
+                                { name: '☕ Lo-Fi & Study Beats', value: 'lofi_chill' },
+                                { name: '🔥 2010s Throwbacks & Dance Anthems', value: 'throwbacks_2010s' },
+                                { name: '🌙 Late Night R&B & Smooth Soul', value: 'late_night_rnb' },
+                                { name: '🎧 Hype, Phonk & Gym Bass', value: 'hype_gym' },
+                                { name: '✨ Pop Party & Global Top 40', value: 'pop_party' },
+                                { name: '🎷 Grandway Jazz Café', value: 'jazz_cafe' },
+                                { name: '🌆 80s Synthwave & Retro', value: 'synthwave' }
+                            )
+                    )
+            )
+            .addSubcommand(sub =>
+                sub.setName('radio-stop')
+                    .setDescription('Turn off 24/7 Radio mode and return to standard queue mode')
+            )
             .addSubcommand(sub =>
                 sub.setName('role')
                     .setDescription('Set or clear the DJ role requirement for music controls')
@@ -599,6 +622,59 @@ module.exports = [
             const db = getDb();
             const member = interaction.member;
             const isManager = member.permissions.has('ManageGuild') || member.permissions.has('Administrator');
+
+            if (sub === 'radio') {
+                const voiceChannel = member.voice.channel || (config.channels.musicRadioVoice && interaction.guild.channels.cache.get(config.channels.musicRadioVoice));
+                if (!voiceChannel) {
+                    return interaction.reply({
+                        content: '🔊 Please join a voice channel or ensure the Grandway Radio channel exists to tune in!',
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                await interaction.deferReply();
+                const stationKey = interaction.options.getString('station');
+                const { radioManager } = require('../utils/musicRadio');
+
+                try {
+                    const result = await radioManager.startRadio({
+                        guild: interaction.guild,
+                        voiceChannel,
+                        textChannel: interaction.channel,
+                        stationKey,
+                        requester: { id: interaction.user.id, tag: interaction.user.tag },
+                        musicManager
+                    });
+
+                    const embed = new EmbedBuilder()
+                        .setTitle(`📻 ${result.station.name}`)
+                        .setDescription(`Tuned continuous 24/7 radio broadcast to **<#${voiceChannel.id}>**!\n\n${result.station.description}`)
+                        .addFields(
+                            { name: '🎶 Starting Mix', value: `${result.trackCount} curated tracks + 24/7 Autoplay DJ`, inline: true },
+                            { name: '🎛️ Tuned DSP', value: `\`${(result.station.filter || 'Clean').toUpperCase()}\``, inline: true },
+                            { name: '📡 Broadcast Channel', value: `<#${voiceChannel.id}>`, inline: true }
+                        )
+                        .setColor(config.colors.primary)
+                        .setFooter({ text: 'Continuous playback active • Inactivity disconnect disabled' })
+                        .setTimestamp();
+
+                    return interaction.editReply({ embeds: [embed] });
+                } catch (err) {
+                    return interaction.editReply({ content: `❌ Could not start radio: ${err.message}` });
+                }
+            }
+
+            if (sub === 'radio-stop') {
+                const queue = musicManager.getQueue(interaction.guild.id);
+                queue.isRadioMode = false;
+                queue.radioStationKey = null;
+                const { radioManager } = require('../utils/musicRadio');
+                radioManager.stopRadio(interaction.guild.id);
+
+                return interaction.reply({
+                    content: '📻 **24/7 Radio mode disabled.** Standard inactivity auto-disconnect is now re-enabled.'
+                });
+            }
 
             if (sub === 'filter') {
                 const isAuthorized = await isDjAuthorized(interaction.member, interaction.guild.id);

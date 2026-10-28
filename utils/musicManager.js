@@ -298,11 +298,32 @@ class GuildMusicQueue {
             if (this.queue.length > 0) {
                 const nextTrack = this.queue.shift();
                 await this.playTrack(nextTrack);
-            } else if (this.autoplay && finishedTrack && reason !== 'stopped') {
+            } else if ((this.autoplay || this.isRadioMode) && reason !== 'stopped') {
                 try {
-                    const related = await musicManager.findRelatedTrack(finishedTrack, this.history);
-                    if (related) {
-                        await this.playTrack(related);
+                    // In radio mode, if queue is empty, grab more tracks from the station or related artists
+                    let nextPick = null;
+                    if (this.isRadioMode && this.radioStationKey) {
+                        try {
+                            const { RADIO_STATIONS } = require('./musicRadio');
+                            const st = RADIO_STATIONS[this.radioStationKey];
+                            if (st && st.tracks && st.tracks.length > 0) {
+                                const randomTrackName = st.tracks[Math.floor(Math.random() * st.tracks.length)];
+                                const res = await musicManager.resolveQuery(randomTrackName, { id: 'RADIO', tag: `📻 ${st.name}` });
+                                nextPick = res.track || res.topTrack;
+                                if (nextPick) {
+                                    nextPick.isRadio = true;
+                                    nextPick.stationName = st.name;
+                                }
+                            }
+                        } catch (_) {}
+                    }
+
+                    if (!nextPick && finishedTrack) {
+                        nextPick = await musicManager.findRelatedTrack(finishedTrack, this.history);
+                    }
+
+                    if (nextPick) {
+                        await this.playTrack(nextPick);
                         return;
                     }
                 } catch (_) {}
@@ -338,8 +359,11 @@ class GuildMusicQueue {
 
     scheduleDisconnect() {
         if (this.disconnectTimeout) clearTimeout(this.disconnectTimeout);
+        // Never auto-disconnect if the bot is acting as 24/7 radio
+        if (this.isRadioMode) return;
+
         this.disconnectTimeout = setTimeout(async () => {
-            if (!this.isPlaying && this.queue.length === 0) {
+            if (!this.isPlaying && this.queue.length === 0 && !this.isRadioMode) {
                 await this.destroy();
                 if (this.textChannel) {
                     this.textChannel.send('👋 Left voice channel due to inactivity. Thanks for listening!').catch(() => {});
