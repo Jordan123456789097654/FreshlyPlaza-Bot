@@ -216,6 +216,69 @@ async function handleInteraction(interaction) {
     if (interaction.isButton()) {
         const customId = interaction.customId;
 
+        // Community Event RSVP Button
+        if (customId.startsWith('rsvp_event_')) {
+            const eventId = parseInt(customId.replace('rsvp_event_', ''), 10);
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            try {
+                const eventRecord = await db.get(`SELECT * FROM events WHERE id = ?`, [eventId]);
+                if (!eventRecord) {
+                    return interaction.editReply({ content: '❌ This event record was not found or has been removed.' });
+                }
+
+                let rsvpUsers = [];
+                try {
+                    rsvpUsers = JSON.parse(eventRecord.rsvp_users || '[]');
+                } catch (_) {
+                    rsvpUsers = [];
+                }
+
+                const userId = interaction.user.id;
+                let isJoining = true;
+
+                if (rsvpUsers.includes(userId)) {
+                    rsvpUsers = rsvpUsers.filter(id => id !== userId);
+                    isJoining = false;
+                } else {
+                    rsvpUsers.push(userId);
+                }
+
+                await db.run(`UPDATE events SET rsvp_users = ? WHERE id = ?`, [JSON.stringify(rsvpUsers), eventId]);
+
+                // Update original announcement message embed with the new RSVP list & count
+                if (interaction.message && interaction.message.editable) {
+                    try {
+                        const oldEmbed = interaction.message.embeds[0];
+                        if (oldEmbed) {
+                            const updatedEmbed = EmbedBuilder.from(oldEmbed);
+                            const attendeesDisplay = rsvpUsers.length > 0
+                                ? `${rsvpUsers.length} Member(s):\n${rsvpUsers.slice(0, 25).map(u => `<@${u}>`).join(', ')}${rsvpUsers.length > 25 ? ` *and ${rsvpUsers.length - 25} more...*` : ''}`
+                                : '0 Members';
+
+                            const fields = (updatedEmbed.data.fields || []).map(f => {
+                                if (f.name.includes('Attendees') || f.name.includes('RSVP')) {
+                                    return { name: `👥 Attendees (RSVP) [${rsvpUsers.length}]`, value: attendeesDisplay, inline: false };
+                                }
+                                return f;
+                            });
+
+                            updatedEmbed.setFields(fields);
+                            await interaction.message.edit({ embeds: [updatedEmbed] }).catch(() => null);
+                        }
+                    } catch (_) {}
+                }
+
+                return interaction.editReply({
+                    content: isJoining
+                        ? `🎉 **You're attending!** Successfully RSVP'd for **${eventRecord.title}**! We look forward to seeing you there.`
+                        : `👋 **RSVP cancelled.** You have removed your attendance for **${eventRecord.title}**.`
+                });
+            } catch (rsvpErr) {
+                return interaction.editReply({ content: `❌ Error processing RSVP: ${rsvpErr.message}` });
+            }
+        }
+
         // Roblox Bio Verification Confirm Button
         if (customId.startsWith('verify_confirm_')) {
             await interaction.deferReply({ ephemeral: true });
@@ -315,6 +378,41 @@ async function handleInteraction(interaction) {
                 verifyModule.pendingVerifications.delete(interaction.user.id);
             }
             return interaction.reply({ content: '🚫 Verification canceled.', ephemeral: true });
+        }
+
+        // Unverified Members List Pagination & Refresh
+        if (customId.startsWith('unverified_')) {
+            if (customId === 'unverified_page_info') {
+                return interaction.deferUpdate();
+            }
+
+            const member = interaction.member;
+            const isAuthorized = member && (
+                member.permissions.has(PermissionFlagsBits.ManageRoles) ||
+                member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+                member.permissions.has(PermissionFlagsBits.Administrator) ||
+                (config.roles.staff && member.roles.cache.has(config.roles.staff)) ||
+                (config.roles.mr && member.roles.cache.has(config.roles.mr)) ||
+                (config.roles.hr && member.roles.cache.has(config.roles.hr))
+            );
+
+            if (!isAuthorized) {
+                return interaction.reply({
+                    content: '🚫 You do not have permission to browse unverified members. (Requires Staff / Manage Roles)',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            let targetPage = 1;
+            if (customId.startsWith('unverified_page_')) {
+                targetPage = parseInt(customId.replace('unverified_page_', ''), 10) || 1;
+            } else if (customId.startsWith('unverified_refresh_')) {
+                targetPage = parseInt(customId.replace('unverified_refresh_', ''), 10) || 1;
+            }
+
+            const { buildUnverifiedPage } = require('../commands/verify');
+            const renderData = await buildUnverifiedPage(interaction.guild, targetPage);
+            return interaction.update(renderData);
         }
 
         // Verification Center "Verify Account" Prompt Button

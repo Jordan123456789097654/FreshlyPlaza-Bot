@@ -23,23 +23,28 @@ module.exports = [
                 [title, description, interaction.user.id, link, time]
             );
 
-            const { formatWorldTime } = require('../utils/timeFormat');
-            const now = new Date();
-            const worldTime = formatWorldTime(now);
+            const { formatWorldTime, parseScheduledTime } = require('../utils/timeFormat');
+            const parsedTarget = parseScheduledTime(time, new Date());
+            const eventTargetDate = parsedTarget || new Date();
+            const worldTime = formatWorldTime(eventTargetDate);
+
+            const statedDisplay = parsedTarget
+                ? `${time} &bull; <t:${worldTime.unixSec}:F> (<t:${worldTime.unixSec}:R>)`
+                : time;
 
             const embed = new EmbedBuilder()
                 .setTitle(`🎊 Grandway Shopping Event — ${title}`)
                 .setDescription(description)
                 .addFields(
                     { name: '👤 Host', value: `<@${interaction.user.id}>`, inline: true },
-                    { name: '⏰ Stated Time', value: time, inline: true },
+                    { name: '⏰ Stated Time', value: statedDisplay, inline: true },
                     { name: '🆔 Event ID', value: `#${res.lastID}`, inline: true },
                     { name: '👥 Attendees (RSVP)', value: '0 Members', inline: false }
                 );
 
             if (worldTime && worldTime.worldTimesList) {
                 embed.addFields({
-                    name: '🌐 Global Timezones (Announced At)',
+                    name: parsedTarget ? '🌐 Global Timezones (Event Start Time)' : '🌐 Global Timezones (Announced At)',
                     value: worldTime.worldTimesList,
                     inline: false
                 });

@@ -405,9 +405,169 @@ module.exports = [
 
             return interaction.editReply({ embeds: [unverifyEmbed] });
         }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('unverified')
+            .setDescription('Staff Command: List all human members (non-bots) who have not verified with Roblox')
+            .addIntegerOption(opt =>
+                opt.setName('page')
+                    .setDescription('Page number to display (10 members per page)')
+                    .setMinValue(1)
+                    .setRequired(false)
+            )
+            .addBooleanOption(opt =>
+                opt.setName('ephemeral')
+                    .setDescription('Whether to make this response visible only to you (default: false)')
+                    .setRequired(false)
+            )
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+        async execute(interaction) {
+            const member = interaction.member;
+            const isAuthorized = member.permissions.has(PermissionFlagsBits.ManageRoles) ||
+                                member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+                                member.permissions.has(PermissionFlagsBits.Administrator) ||
+                                (config.roles.staff && member.roles.cache.has(config.roles.staff)) ||
+                                (config.roles.mr && member.roles.cache.has(config.roles.mr)) ||
+                                (config.roles.hr && member.roles.cache.has(config.roles.hr));
+
+            if (!isAuthorized) {
+                return interaction.reply({
+                    content: '🚫 You do not have permission to view unverified members. (Requires Staff / Manage Roles)',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const isEphemeral = interaction.options.getBoolean('ephemeral') ?? false;
+            await interaction.deferReply({ flags: isEphemeral ? MessageFlags.Ephemeral : undefined });
+
+            const page = interaction.options.getInteger('page') || 1;
+            const renderData = await buildUnverifiedPage(interaction.guild, page);
+
+            return interaction.editReply(renderData);
+        }
     }
 ];
 
+/**
+ * Builds the embed and pagination action row for unverified members
+ */
+async function buildUnverifiedPage(guild, pageNumber = 1) {
+    try {
+        await guild.members.fetch();
+    } catch (_) {}
+
+    const db = getDb();
+    const data = db.getData();
+    const verifications = data.verifications || {};
+
+    const unverifiedMembers = [];
+    let totalHumans = 0;
+    let totalBots = 0;
+
+    for (const [, m] of guild.members.cache) {
+        if (m.user.bot) {
+            totalBots++;
+            continue;
+        }
+        totalHumans++;
+
+        const isVerified = (config.roles.verified && m.roles.cache.has(config.roles.verified)) ||
+                           Boolean(verifications[m.id]);
+
+        if (!isVerified) {
+            unverifiedMembers.push(m);
+        }
+    }
+
+    // Sort unverified members: newest joins first
+    unverifiedMembers.sort((a, b) => (b.joinedTimestamp || 0) - (a.joinedTimestamp || 0));
+
+    const totalUnverified = unverifiedMembers.length;
+    const verifiedCount = totalHumans - totalUnverified;
+    const verifiedPct = totalHumans > 0 ? Math.round((verifiedCount / totalHumans) * 100) : 0;
+    const unverifiedPct = totalHumans > 0 ? Math.round((totalUnverified / totalHumans) * 100) : 0;
+
+    if (totalUnverified === 0) {
+        const cleanEmbed = new EmbedBuilder()
+            .setTitle('🎉 All Members Verified!')
+            .setDescription(`Every single human member in **${guild.name}** has verified their Roblox account!`)
+            .addFields(
+                { name: '👥 Total Humans', value: `${totalHumans}`, inline: true },
+                { name: '✅ Verified Rate', value: `100% (${verifiedCount}/${totalHumans})`, inline: true },
+                { name: '🤖 Excluded Bots', value: `${totalBots}`, inline: true }
+            )
+            .setColor(config.colors.secondary || '#57F287')
+            .setTimestamp();
+        return { embeds: [cleanEmbed], components: [] };
+    }
+
+    const pageSize = 10;
+    const totalPages = Math.ceil(totalUnverified / pageSize);
+    const currentPage = Math.max(1, Math.min(pageNumber, totalPages));
+
+    const startIndex = (currentPage - 1) * pageSize;
+    const pageSlice = unverifiedMembers.slice(startIndex, startIndex + pageSize);
+
+    const memberListText = pageSlice.map((m, i) => {
+        const num = startIndex + i + 1;
+        const joinedText = m.joinedTimestamp ? `<t:${Math.floor(m.joinedTimestamp / 1000)}:R>` : 'Unknown';
+        const createdText = `<t:${Math.floor(m.user.createdTimestamp / 1000)}:R>`;
+        const hasUnverifiedRole = config.roles.unverified && m.roles.cache.has(config.roles.unverified);
+        const roleStatus = hasUnverifiedRole ? ' • `[Role: Unverified]`' : '';
+        return `**#${num}** <@${m.id}> • \`@${m.user.username}\` (\`${m.id}\`)${roleStatus}\n` +
+               `└ 📥 Joined: ${joinedText} • 🎂 Created: ${createdText}`;
+    }).join('\n\n');
+
+    const embed = new EmbedBuilder()
+        .setTitle(`📋 Unverified Members (Non-Bots) — ${guild.name}`)
+        .setDescription(
+            `Found **${totalUnverified}** unverified human member(s) out of **${totalHumans}** total humans.\n\n` +
+            memberListText
+        )
+        .addFields(
+            { name: '📊 Statistics', value: `👥 Total Humans: **${totalHumans}**\n✅ Verified: **${verifiedCount}** (${verifiedPct}%)\n⚠️ Unverified: **${totalUnverified}** (${unverifiedPct}%)`, inline: true },
+            { name: '🤖 Filter', value: `**${totalBots}** Bots excluded\n📄 Page **${currentPage}** of **${totalPages}**`, inline: true }
+        )
+        .setColor(config.colors.warning || '#FFAB00')
+        .setFooter({ text: `Grandway Shopping • Page ${currentPage}/${totalPages} • Use buttons to navigate` })
+        .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`unverified_page_${currentPage - 1}`)
+            .setLabel('Previous')
+            .setEmoji('⬅️')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(currentPage <= 1),
+        new ButtonBuilder()
+            .setCustomId(`unverified_page_info`)
+            .setLabel(`Page ${currentPage} / ${totalPages}`)
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(true),
+        new ButtonBuilder()
+            .setCustomId(`unverified_page_${currentPage + 1}`)
+            .setLabel('Next')
+            .setEmoji('➡️')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(currentPage >= totalPages),
+        new ButtonBuilder()
+            .setCustomId(`unverified_page_1`)
+            .setLabel('First')
+            .setEmoji('⏮️')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(currentPage === 1),
+        new ButtonBuilder()
+            .setCustomId(`unverified_refresh_${currentPage}`)
+            .setLabel('Refresh')
+            .setEmoji('🔄')
+            .setStyle(ButtonStyle.Success)
+    );
+
+    return { embeds: [embed], components: [row] };
+}
+
+module.exports.buildUnverifiedPage = buildUnverifiedPage;
 module.exports.pendingVerifications = pendingVerifications;
 module.exports.fetchRobloxUserBio = fetchRobloxUserBio;
 module.exports.fetchRobloxGroupRank = fetchRobloxGroupRank;

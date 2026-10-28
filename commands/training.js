@@ -34,9 +34,14 @@ module.exports = [
                 [interaction.user.id, cohost ? cohost.id : null, type]
             );
 
-            const { formatWorldTime } = require('../utils/timeFormat');
-            const now = new Date();
-            const worldTime = formatWorldTime(now);
+            const { formatWorldTime, parseScheduledTime } = require('../utils/timeFormat');
+            const parsedTarget = parseScheduledTime(time, new Date());
+            const trainingTargetDate = parsedTarget || new Date();
+            const worldTime = formatWorldTime(trainingTargetDate);
+
+            const statedDisplay = parsedTarget
+                ? `${time} &bull; <t:${worldTime.unixSec}:F> (<t:${worldTime.unixSec}:R>)`
+                : time;
 
             const embed = new EmbedBuilder()
                 .setTitle(`🎓 Grandway Shopping — ${type} Training Session`)
@@ -47,14 +52,14 @@ module.exports = [
                 .addFields(
                     { name: '👤 Training Host', value: `<@${interaction.user.id}>`, inline: true },
                     { name: '👥 Training Co-Host', value: cohost ? `<@${cohost.id}>` : '*None*', inline: true },
-                    { name: '⏰ Stated Time', value: time, inline: true },
+                    { name: '⏰ Stated Time', value: statedDisplay, inline: true },
                     { name: '🆔 Session ID', value: `#${res.lastID}`, inline: true },
                     { name: '🔗 Training Center', value: `[Join Training Center](${trainingLink})`, inline: false }
                 );
 
             if (worldTime && worldTime.worldTimesList) {
                 embed.addFields({
-                    name: '🌐 Global Timezones (Announced At)',
+                    name: parsedTarget ? '🌐 Global Timezones (Session Start Time)' : '🌐 Global Timezones (Announced At)',
                     value: worldTime.worldTimesList,
                     inline: false
                 });
